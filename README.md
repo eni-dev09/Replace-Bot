@@ -53,3 +53,4 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
 - La recherche Vinted utilise désormais `https://api.<domaine>/svc-catalogue/items` avec une session anonyme obtenue depuis le site `www`. L'API est non officielle et peut changer sans préavis. Les erreurs 401/403 déclenchent un renouvellement limité de session ; les 404 sont remontées comme erreurs de route.
 - Le chargement de l'annonce détaillée utilise encore l'ancienne route `/api/v2/items/:id` ; Vinted peut aussi la modifier séparément. La recherche catalogue a des tests mockés, mais n'a pas été validée sur un vrai compte ou une vraie instance Vinted.
 - `npm test` : tests de logique et tests mockés de l'adaptateur Vinted, sans accès réseau réel ni Discord.
+- Analyse de capture d'écran : l'API Anthropic est facturée à part de l'abonnement Claude (crédits sur console.anthropic.com → Plans & Billing). Sans crédits, le bot demande d'envoyer le lien à la place.
