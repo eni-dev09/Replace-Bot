@@ -89,7 +89,7 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   const am = analysisMessage(an);
   assert(am.embeds[0].data.title.includes('risque'));
   await assert.rejects(require('./analyse').analyse({ url: 'https://exemple.com/x' }), /non reconnu/);
-  await assert.rejects(require('./analyse').analyse({ imageUrls: ['http://img/x.png'] }), /ANTHROPIC_API_KEY/);
+  await assert.rejects(require('./analyse').analyse({ imageUrls: ['http://img/x.png'] }), /OPENAI_API_KEY/);
   console.log('ok analyse lien', an.assessment.risk);
 
   // 6. capture d'écran (API Anthropic simulée)
@@ -109,6 +109,35 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   global.fetch = realFetch; delete process.env.ANTHROPIC_API_KEY;
   console.log('ok analyse capture', shot.assessment.risk);
 
+  // 6a. capture d'écran via OpenAI (priorité si la clé est présente)
+  process.env.OPENAI_API_KEY = 'sk-test';
+  process.env.ANTHROPIC_API_KEY = 'also-set';
+  assert.strictEqual(require('./ai').provider(), 'openai');
+  const realFetch2 = global.fetch;
+  const seen = [];
+  global.fetch = async (url, opts) => {
+    if (String(url).startsWith('http://img/')) return new Response(Buffer.from('png'), { headers: { 'content-type': 'image/png' } });
+    assert.strictEqual(url, 'https://api.openai.com/v1/chat/completions');
+    assert.strictEqual(opts.headers.Authorization, 'Bearer sk-test');
+    const body = JSON.parse(opts.body);
+    seen.push(body);
+    assert.strictEqual(body.messages[0].role, 'system');
+    const isShot = body.messages[1].content.some(c => c.type === 'image_url');
+    if (isShot) {
+      assert(body.messages[1].content.find(c => c.type === 'image_url').image_url.url.startsWith('data:image/png;base64,'));
+      assert.deepStrictEqual(body.response_format, { type: 'json_object' });
+    }
+    const text = !isShot ? 'rtx 3070ti' : JSON.stringify({ readable: true, platform: 'fake', title: 'RTX 3070 Ti', price: 90, seller_rating: null,
+      description: 'ecrire sur whatsapp', search_query: 'rtx 3070ti', red_flags: ['contact WhatsApp'] });
+    return new Response(JSON.stringify({ choices: [{ message: { content: text } }] }), { headers: { 'content-type': 'application/json' } });
+  };
+  const shot2 = await require('./analyse').analyse({ imageUrls: ['http://img/a.png'] });
+  assert.strictEqual(shot2.ad.price, 90); assert(shot2.assessment.risk >= 60);
+  assert(seen[0].max_completion_tokens && seen[0].model);
+  global.fetch = realFetch2; delete process.env.OPENAI_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+  assert.strictEqual(require('./ai').provider(), null);
+  console.log('ok analyse capture OpenAI');
+
   // 6b. cache : 2 appels identiques = 1 recherche réelle
   process.env.SEARCH_CACHE_TTL_S = '60';
   let calls = 0;
@@ -126,6 +155,12 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   assert(credit.includes('crédits') && !credit.includes('{'));
   assert((await explainError(fakeRes(401, {}))).includes('invalide'));
   assert((await explainError(fakeRes(500, {}))).includes('HTTP 500'));
+  const oai = (status, body) => explainError(fakeRes(status, body), 'openai');
+  const q = await oai(429, { error: { code: 'insufficient_quota', message: 'You exceeded your current quota, please check your plan and billing details.' } });
+  assert(q.includes('crédits') && q.includes('platform.openai.com') && !q.includes('{'));
+  assert((await oai(429, { error: { message: 'Rate limit reached' } })).includes('saturée'));
+  assert((await oai(401, { error: { message: 'Incorrect API key' } })).includes('OPENAI_API_KEY'));
+  assert((await oai(404, { error: { message: 'The model does not exist' } })).includes('OPENAI_MODEL'));
   console.log('ok erreurs IA');
 
   // 7. mention
