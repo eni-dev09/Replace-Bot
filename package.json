@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "test": "node bot/test.js"
+    "test": "node bot/test.js && node bot/platforms/vinted.test.js"
   },
   "engines": {
     "node": ">=18.17"

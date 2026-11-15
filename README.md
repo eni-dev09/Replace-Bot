@@ -5,17 +5,16 @@
 2. Copie l'**Application ID** (General Information).
 3. Invitation : OAuth2 → URL Generator → scopes `bot` + `applications.commands`, permissions
    *View Channels, Send Messages, Embed Links, Read Message History* → ouvre l'URL et choisis ton serveur.
-4. `cp .env.example .env` (remplis `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`) puis :
+4. Copie `.env.example` vers `.env` et renseigne `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` et `DISCORD_GUILD_ID`, puis :
 ```
 npm install
-npm run bot
+npm start
 ```
 Aucun intent privilégié requis. Leboncoin demande en plus Python 3.10+ et `pip install -r requirements.txt` ;
 sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (cas de Bot-Hosting).
 
 ## Déploiement
-- **Bot-Hosting / hébergeur Node** : envoyer le dépôt, fichier principal `index.js`, variables dans `.env`.
-  Sans Python, Leboncoin se désactive tout seul (Vinted reste actif).
+- **Bot-Hosting / hébergeur Node** : déployer le contenu du dépôt à la racine du serveur, fichier principal `index.js`, puis définir les variables Discord dans le panel ou `.env`. Le panel doit lancer `npm install` puis `node index.js`. Sans Python, Leboncoin se désactive tout seul (Vinted reste actif).
 - **VPS / Docker (Leboncoin inclus)** : `cp .env.example .env && docker compose up -d --build`.
 - Les recherches sont mises en cache 5 min (`SEARCH_CACHE_TTL_S`, 0 = désactivé).
 
@@ -50,7 +49,7 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
 (voir `vinted.js`), puis la déclarer dans `bot/platforms/index.js`.
 
 ## Notes
-- Leboncoin (Datadome) et Vinted bloquent les requêtes trop rapides : appels espacés (10 s / 4 s), 10 s de pause
-  par utilisateur entre deux mentions. Les IP d'hébergeurs gratuits sont souvent bloquées : proxy ou VPS en cas d'erreur 403/429.
-- Vinted : API web non officielle, peut changer sans préavis.
-- `npm test` : tests de la logique, sans réseau ni Discord.
+- Leboncoin (Datadome) et Vinted peuvent limiter les requêtes : appels espacés (10 s / 4 s), cache des recherches et 10 s de pause par utilisateur entre deux mentions. Les limites de la plateforme doivent être respectées ; des réponses 403/429 demandent de réessayer plus tard, sans tenter de contourner leur protection.
+- La recherche Vinted utilise désormais `https://api.<domaine>/svc-catalogue/items` avec une session anonyme obtenue depuis le site `www`. L'API est non officielle et peut changer sans préavis. Les erreurs 401/403 déclenchent un renouvellement limité de session ; les 404 sont remontées comme erreurs de route.
+- Le chargement de l'annonce détaillée utilise encore l'ancienne route `/api/v2/items/:id` ; Vinted peut aussi la modifier séparément. La recherche catalogue a des tests mockés, mais n'a pas été validée sur un vrai compte ou une vraie instance Vinted.
+- `npm test` : tests de logique et tests mockés de l'adaptateur Vinted, sans accès réseau réel ni Discord.
