@@ -1,0 +1,19 @@
+{
+  "name": "replace-bot",
+  "version": "2.0.0",
+  "description": "Bot Discord de bonnes affaires : prix du marché, meilleures offres et fiabilité des annonces (Leboncoin, Vinted)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node bot/test.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.28.1",
+    "dotenv": "^18.0.10"
+  }
+}
