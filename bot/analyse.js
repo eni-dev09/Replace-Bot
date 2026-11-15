@@ -23,7 +23,7 @@ async function analyse({ url, imageUrls = [], text = '' }) {
     if (!hit.available) throw new Error(`${hit.platform.label} n'est pas activé sur cet hébergement : envoie plutôt une **capture d'écran** de l'annonce.`);
     ad = await hit.platform.getAd(hit.id);
   } else if (imageUrls.length) {
-    if (!ai.enabled()) throw new Error('L\'analyse de capture d\'écran nécessite une clé IA (`OPENAI_API_KEY`, ou `ANTHROPIC_API_KEY`) dans le .env (voir README). En attendant, envoie le **lien** de l\'annonce.');
+    if (!ai.enabled()) throw new Error('L\'analyse de capture d\'écran nécessite une clé IA (`GEMINI_API_KEY`, `OPENAI_API_KEY` ou `ANTHROPIC_API_KEY`) dans le .env (voir README). En attendant, envoie le **lien** de l\'annonce.');
     ad = await ai.readScreenshot(imageUrls, text);
   } else {
     throw new Error('Envoie un lien d\'annonce ou une capture d\'écran.');

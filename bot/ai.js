@@ -1,43 +1,63 @@
 // Lecture d'une capture d'écran d'annonce + génération de la requête de recherche via une IA
-// (optionnel). Fournisseurs : OpenAI (OPENAI_API_KEY) ou Anthropic (ANTHROPIC_API_KEY).
-// Choix : AI_PROVIDER=openai|anthropic ; sinon OpenAI si sa clé est présente, puis Anthropic.
+// (optionnel). Fournisseurs : Google Gemini / AI Studio (GEMINI_API_KEY), OpenAI (OPENAI_API_KEY)
+// ou Anthropic (ANTHROPIC_API_KEY).
+// Choix : AI_PROVIDER=gemini|openai|anthropic ; sinon le premier dont la clé est présente (dans cet ordre).
 // Sans clé, seuls les liens d'annonce, les mentions et /deals fonctionnent.
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const OK_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
+const GEMINI_MODEL_DEFAULT = 'gemini-3.1-flash-lite'; // plus précis : gemini-3.6-flash (GEMINI_MODEL)
 const OPENAI_MODEL_DEFAULT = 'gpt-6.1-terra'; // moins cher : gpt-6-luna (OPENAI_MODEL)
 const ANTHROPIC_MODEL_DEFAULT = 'claude-haiku-5-5';
 
+const geminiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const KEYS = { gemini: geminiKey, openai: () => process.env.OPENAI_API_KEY, anthropic: () => process.env.ANTHROPIC_API_KEY };
+
 function provider() {
   const forced = String(process.env.AI_PROVIDER || '').toLowerCase();
-  if (forced === 'openai' && process.env.OPENAI_API_KEY) return 'openai';
-  if (forced === 'anthropic' && process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  return null;
+  if (KEYS[forced]?.()) return forced;
+  return ['gemini', 'openai', 'anthropic'].find(p => KEYS[p]()) || null;
 }
 const enabled = () => !!provider();
 
 // Message d'erreur lisible (sans JSON brut) pour l'utilisateur Discord.
+const PROVIDERS = {
+  gemini: { name: 'Google (Gemini)', keyVar: 'GEMINI_API_KEY', modelVar: 'GEMINI_MODEL', where: 'aistudio.google.com (clé API) et console.cloud.google.com (facturation)' },
+  openai: { name: 'OpenAI', keyVar: 'OPENAI_API_KEY', modelVar: 'OPENAI_MODEL', where: 'platform.openai.com (Billing, distinct de l\'abonnement ChatGPT)' },
+  anthropic: { name: 'Anthropic', keyVar: 'ANTHROPIC_API_KEY', modelVar: 'ANTHROPIC_MODEL', where: 'console.anthropic.com (Plans & Billing, distinct de l\'abonnement Claude)' },
+};
+
 async function explainError(res, prov = 'anthropic') {
   const raw = await res.text().catch(() => '');
   let err = {};
   try { err = JSON.parse(raw)?.error || {}; } catch { err = { message: raw }; }
   const msg = String(err.message || '');
-  const where = prov === 'openai'
-    ? 'platform.openai.com (Billing, distinct de l\'abonnement ChatGPT)'
-    : 'console.anthropic.com (Plans & Billing, distinct de l\'abonnement Claude)';
-  const name = prov === 'openai' ? 'OpenAI' : 'Anthropic';
-  const keyVar = prov === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+  const { name, keyVar, modelVar, where } = PROVIDERS[prov];
+  const fallback = 'En attendant, envoie le **lien** de l\'annonce.';
+
+  if (prov === 'gemini') {
+    if (res.status === 429 || err.status === 'RESOURCE_EXHAUSTED') {
+      return `Analyse de capture indisponible : quota Gemini atteint (palier gratuit limité par minute et par jour). Réessaie plus tard ou active la facturation sur ${where}. ${fallback}`;
+    }
+    if (/api key not valid|API_KEY_INVALID|api key expired/i.test(msg) || res.status === 401) {
+      return `Analyse de capture indisponible : clé ${keyVar} invalide. Crée-en une sur aistudio.google.com et mets-la dans le .env.`;
+    }
+    if (res.status === 403) return `Analyse de capture indisponible : accès refusé par Google (clé révoquée, API non activée ou région non supportée). ${fallback}`;
+    if (/location is not supported/i.test(msg)) return `Analyse de capture indisponible : Gemini n'est pas disponible depuis la région de l'hébergeur. ${fallback}`;
+    if (res.status === 404 || (res.status === 400 && /model/i.test(msg))) {
+      return `Analyse de capture indisponible : modèle Gemini introuvable. Vérifie ${modelVar} dans le .env (ex. gemini-3.1-flash-lite).`;
+    }
+    if (res.status === 503 || res.status === 500) return 'Analyse de capture momentanément indisponible côté Google : réessaie dans une minute.';
+    return `Analyse de capture indisponible (IA, HTTP ${res.status}). ${fallback}`;
+  }
+
   const noCredit = prov === 'openai'
     ? err.code === 'insufficient_quota' || /exceeded your current quota|insufficient[_ ]quota|billing/i.test(msg)
     : /credit balance/i.test(msg);
-  if (noCredit) {
-    return `Analyse de capture indisponible : le compte API ${name} n'a plus de crédits. Ajoute-en sur ${where}. En attendant, envoie le **lien** de l'annonce.`;
-  }
+  if (noCredit) return `Analyse de capture indisponible : le compte API ${name} n'a plus de crédits. Ajoute-en sur ${where}. ${fallback}`;
   if (res.status === 401) return `Analyse de capture indisponible : clé ${keyVar} invalide. Vérifie-la dans le .env.`;
   if (res.status === 404 || (res.status === 400 && /model/i.test(msg))) {
-    return `Analyse de capture indisponible : modèle ${name} introuvable. Vérifie ${prov === 'openai' ? 'OPENAI_MODEL' : 'ANTHROPIC_MODEL'} dans le .env.`;
+    return `Analyse de capture indisponible : modèle ${name} introuvable. Vérifie ${modelVar} dans le .env.`;
   }
   if (res.status === 429 || res.status === 529) return 'Analyse de capture momentanément saturée : réessaie dans une minute.';
   return `Analyse de capture indisponible (IA, HTTP ${res.status}). Envoie plutôt le **lien** de l'annonce.`;
@@ -47,6 +67,29 @@ async function explainError(res, prov = 'anthropic') {
 async function call(parts, system, maxTokens = 700, { json = false } = {}) {
   const prov = provider();
   if (!prov) throw new Error('NO_AI');
+
+  if (prov === 'gemini') {
+    const model = process.env.GEMINI_MODEL || GEMINI_MODEL_DEFAULT;
+    const body = {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: parts.map(p => p.type === 'image'
+        ? { inlineData: { mimeType: p.media_type, data: p.data } }
+        : { text: p.text }) }],
+      generationConfig: { maxOutputTokens: maxTokens },
+    };
+    if (json) body.generationConfig.responseMimeType = 'application/json';
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': geminiKey(), 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!res.ok) throw new Error(await explainError(res, 'gemini'));
+    const data = await res.json();
+    const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+    if (!text) throw new Error(`Analyse de capture indisponible : réponse vide de Gemini${data.promptFeedback?.blockReason ? ` (bloquée : ${data.promptFeedback.blockReason})` : ''}. Réessaie avec une autre capture.`);
+    return text;
+  }
 
   if (prov === 'openai') {
     const content = parts.map(p => p.type === 'image'
