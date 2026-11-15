@@ -159,7 +159,9 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   };
   const shot3 = await require('./analyse').analyse({ imageUrls: ['http://img/a.png'] });
   assert.strictEqual(shot3.ad.price, 90); assert(shot3.assessment.risk >= 60); assert(gseen[0].generationConfig.maxOutputTokens);
-  global.fetch = async () => new Response(JSON.stringify({ candidates: [], promptFeedback: { blockReason: 'SAFETY' } }), { headers: { 'content-type': 'application/json' } });
+  global.fetch = async url => String(url).startsWith('http://img/')
+    ? new Response(Buffer.from('png'), { headers: { 'content-type': 'image/png' } })
+    : new Response(JSON.stringify({ candidates: [], promptFeedback: { blockReason: 'SAFETY' } }), { headers: { 'content-type': 'application/json' } });
   await assert.rejects(require('./ai').readScreenshot(['http://img/a.png']), /réponse vide de Gemini.*SAFETY/);
   global.fetch = realFetch3; delete process.env.GEMINI_API_KEY; delete process.env.OPENAI_API_KEY; delete process.env.ANTHROPIC_API_KEY;
   process.env.GOOGLE_API_KEY = 'alias'; assert.strictEqual(require('./ai').provider(), 'gemini'); delete process.env.GOOGLE_API_KEY;
