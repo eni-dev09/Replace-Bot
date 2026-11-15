@@ -178,6 +178,9 @@ module.exports = {
   emoji: '🟢',
   color: 0x09b1ba,
 
+  // Réinitialise la session anonyme (utilisé par les tests pour isoler les scénarios).
+  _resetSession() { cookies = new Map(); anonId = ''; cookieAt = 0; },
+
   parseUrl(url) {
     try {
       const parsed = new URL(url);

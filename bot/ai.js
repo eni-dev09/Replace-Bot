@@ -7,6 +7,19 @@ const OK_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 const enabled = () => !!process.env.ANTHROPIC_API_KEY;
 
+// Message d'erreur lisible (sans JSON brut) pour l'utilisateur Discord.
+async function explainError(res) {
+  const raw = await res.text().catch(() => '');
+  let msg = '';
+  try { msg = JSON.parse(raw)?.error?.message || ''; } catch { msg = raw; }
+  if (/credit balance/i.test(msg)) {
+    return 'Analyse de capture indisponible : le compte API Anthropic n\'a plus de crédits. Ajoute-en sur console.anthropic.com (Plans & Billing, distinct de l\'abonnement Claude). En attendant, envoie le **lien** de l\'annonce.';
+  }
+  if (res.status === 401) return 'Analyse de capture indisponible : clé ANTHROPIC_API_KEY invalide. Vérifie-la dans le .env.';
+  if (res.status === 429 || res.status === 529) return 'Analyse de capture momentanément saturée : réessaie dans une minute.';
+  return `Analyse de capture indisponible (IA, HTTP ${res.status}). Envoie plutôt le **lien** de l'annonce.`;
+}
+
 async function call(content, system, maxTokens = 700) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -14,10 +27,7 @@ async function call(content, system, maxTokens = 700) {
     body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }),
     signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`IA indisponible (HTTP ${res.status}) ${body.slice(0, 120)}`);
-  }
+  if (!res.ok) throw new Error(await explainError(res));
   const data = await res.json();
   return (data.content || []).map(b => b.text || '').join('');
 }
@@ -77,4 +87,4 @@ async function suggestQuery(title, description = '') {
   } catch { return null; }
 }
 
-module.exports = { enabled, readScreenshot, suggestQuery };
+module.exports = { enabled, readScreenshot, suggestQuery, explainError };

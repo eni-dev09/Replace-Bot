@@ -20,6 +20,7 @@ function response(status, body = {}, setCookies = [], extraHeaders = {}) {
 
 async function withMockFetch(mock, run) {
   const originalFetch = global.fetch;
+  vinted._resetSession(); // chaque scénario repart d'une session vierge
   global.fetch = mock;
   try { await run(); } finally { global.fetch = originalFetch; }
 }

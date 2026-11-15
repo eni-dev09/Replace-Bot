@@ -18,6 +18,10 @@ async function registerCommands() {
     : Routes.applicationCommands(DISCORD_CLIENT_ID);
   await rest.put(route, { body: commands.definitions });
   console.log(`[bot] ${commands.definitions.length} commandes enregistrées (${DISCORD_GUILD_ID ? 'serveur' : 'global'})`);
+  if (DISCORD_GUILD_ID) {
+    // Évite les doublons : d'anciennes commandes globales + celles du serveur s'afficheraient deux fois.
+    await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID), { body: [] });
+  }
 }
 
 // Les messages qui MENTIONNENT le bot arrivent avec leur contenu sans intent privilégié.

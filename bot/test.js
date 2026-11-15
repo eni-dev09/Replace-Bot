@@ -119,6 +119,15 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   process.env.SEARCH_CACHE_TTL_S = '0';
   console.log('ok cache');
 
+  // 6c. erreurs Anthropic lisibles
+  const { explainError } = require('./ai');
+  const fakeRes = (status, body) => ({ status, text: async () => JSON.stringify(body) });
+  const credit = await explainError(fakeRes(400, { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } }));
+  assert(credit.includes('crédits') && !credit.includes('{'));
+  assert((await explainError(fakeRes(401, {}))).includes('invalide'));
+  assert((await explainError(fakeRes(500, {}))).includes('HTTP 500'));
+  console.log('ok erreurs IA');
+
   // 7. mention
   const { onMessage, parseQuery } = require('./mention');
   assert.deepStrictEqual(parseQuery('rtx 3070ti max 300€ -coque'), { query: 'rtx 3070ti', maxPrice: 300, exclude: ['coque'] });
