@@ -138,6 +138,33 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   assert.strictEqual(require('./ai').provider(), null);
   console.log('ok analyse capture OpenAI');
 
+  // 6a2. capture d'écran via Gemini (prioritaire)
+  process.env.GEMINI_API_KEY = 'g-test'; process.env.OPENAI_API_KEY = 'also'; process.env.ANTHROPIC_API_KEY = 'also';
+  assert.strictEqual(require('./ai').provider(), 'gemini');
+  process.env.AI_PROVIDER = 'openai'; assert.strictEqual(require('./ai').provider(), 'openai'); delete process.env.AI_PROVIDER;
+  const realFetch3 = global.fetch;
+  const gseen = [];
+  global.fetch = async (url, opts) => {
+    if (String(url).startsWith('http://img/')) return new Response(Buffer.from('png'), { headers: { 'content-type': 'image/png' } });
+    assert(String(url).startsWith('https://generativelanguage.googleapis.com/v1beta/models/') && String(url).endsWith(':generateContent'));
+    assert.strictEqual(opts.headers['x-goog-api-key'], 'g-test');
+    const body = JSON.parse(opts.body); gseen.push(body);
+    assert(body.systemInstruction.parts[0].text.length > 10);
+    const parts = body.contents[0].parts;
+    const isShot = parts.some(p => p.inlineData);
+    if (isShot) { assert.strictEqual(parts.find(p => p.inlineData).inlineData.mimeType, 'image/png'); assert.strictEqual(body.generationConfig.responseMimeType, 'application/json'); }
+    const text = !isShot ? 'rtx 3070ti' : JSON.stringify({ readable: true, platform: 'fake', title: 'RTX 3070 Ti', price: 90, seller_rating: null,
+      description: 'ecrire sur whatsapp', search_query: 'rtx 3070ti', red_flags: ['contact WhatsApp'] });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { headers: { 'content-type': 'application/json' } });
+  };
+  const shot3 = await require('./analyse').analyse({ imageUrls: ['http://img/a.png'] });
+  assert.strictEqual(shot3.ad.price, 90); assert(shot3.assessment.risk >= 60); assert(gseen[0].generationConfig.maxOutputTokens);
+  global.fetch = async () => new Response(JSON.stringify({ candidates: [], promptFeedback: { blockReason: 'SAFETY' } }), { headers: { 'content-type': 'application/json' } });
+  await assert.rejects(require('./ai').readScreenshot(['http://img/a.png']), /réponse vide de Gemini.*SAFETY/);
+  global.fetch = realFetch3; delete process.env.GEMINI_API_KEY; delete process.env.OPENAI_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+  process.env.GOOGLE_API_KEY = 'alias'; assert.strictEqual(require('./ai').provider(), 'gemini'); delete process.env.GOOGLE_API_KEY;
+  console.log('ok analyse capture Gemini');
+
   // 6b. cache : 2 appels identiques = 1 recherche réelle
   process.env.SEARCH_CACHE_TTL_S = '60';
   let calls = 0;
@@ -161,6 +188,13 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   assert((await oai(429, { error: { message: 'Rate limit reached' } })).includes('saturée'));
   assert((await oai(401, { error: { message: 'Incorrect API key' } })).includes('OPENAI_API_KEY'));
   assert((await oai(404, { error: { message: 'The model does not exist' } })).includes('OPENAI_MODEL'));
+  const gem = (status, body) => explainError(fakeRes(status, body), 'gemini');
+  const gq = await gem(429, { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Quota exceeded' } });
+  assert(gq.includes('quota') && !gq.includes('{'));
+  assert((await gem(400, { error: { message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } })).includes('GEMINI_API_KEY'));
+  assert((await gem(404, { error: { message: 'models/x is not found', status: 'NOT_FOUND' } })).includes('GEMINI_MODEL'));
+  assert((await gem(400, { error: { message: 'User location is not supported for the API use.' } })).includes('région'));
+  assert((await gem(403, { error: { message: 'denied' } })).includes('refusé'));
   console.log('ok erreurs IA');
 
   // 7. mention

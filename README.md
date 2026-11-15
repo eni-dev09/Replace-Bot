@@ -24,7 +24,7 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
 | `@bot rtx 3070ti` | Prix médian du marché (par plateforme) + 5 meilleures offres avec verdict de fiabilité rapide |
 | `@bot rtx 3070ti max 300€ -coque` | Pareil, dans ton budget, en excluant le mot « coque » |
 | `@bot https://www.leboncoin.fr/ad/...` | Analyse de fiabilité complète de l'annonce (lien Leboncoin ou Vinted) |
-| `@bot` + capture d'écran jointe | Idem depuis la capture (nécessite `OPENAI_API_KEY`, ou `ANTHROPIC_API_KEY`) |
+| `@bot` + capture d'écran jointe | Idem depuis la capture (nécessite `GEMINI_API_KEY`, `OPENAI_API_KEY` ou `ANTHROPIC_API_KEY`) |
 
 ## Commandes slash
 | Commande | Rôle |
@@ -53,4 +53,4 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
 - La recherche Vinted utilise désormais `https://api.<domaine>/svc-catalogue/items` avec une session anonyme obtenue depuis le site `www`. L'API est non officielle et peut changer sans préavis. Les erreurs 401/403 déclenchent un renouvellement limité de session ; les 404 sont remontées comme erreurs de route.
 - Le chargement de l'annonce détaillée utilise encore l'ancienne route `/api/v2/items/:id` ; Vinted peut aussi la modifier séparément. La recherche catalogue a des tests mockés, mais n'a pas été validée sur un vrai compte ou une vraie instance Vinted.
 - `npm test` : tests de logique et tests mockés de l'adaptateur Vinted, sans accès réseau réel ni Discord.
-- Analyse de capture d'écran : fournisseur d'IA au choix, **OpenAI** (`OPENAI_API_KEY`, modèle `OPENAI_MODEL`, défaut `gpt-6.1-terra`, moins cher `gpt-6-luna`) ou Anthropic. L'API est facturée à part de l'abonnement ChatGPT/Claude (crédits sur platform.openai.com → Billing). Sans crédits, le bot demande d'envoyer le lien à la place.
+- Analyse de capture d'écran : fournisseur d'IA au choix, **Google AI Studio / Gemini** (`GEMINI_API_KEY`, modèle `GEMINI_MODEL`, défaut `gemini-3.1-flash-lite`, palier gratuit limité), OpenAI ou Anthropic. Priorité : Gemini > OpenAI > Anthropic (ou `AI_PROVIDER`). ⚠️ Sur le palier gratuit de Google, les contenus envoyés (tes captures) peuvent servir à améliorer leurs produits.
