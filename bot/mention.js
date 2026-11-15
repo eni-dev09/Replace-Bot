@@ -28,7 +28,12 @@ function parseQuery(text) {
 const HELP = '👋 Écris-moi un produit : `@bot rtx 3070ti` (option : `max 300€`, `-coque` pour exclure un mot).\n' +
   'Ou envoie-moi **le lien** d\'une annonce Leboncoin/Vinted, ou une **capture d\'écran**, pour savoir si elle est fiable.';
 
-async function onMessage(msg, client) {
+/**
+ * @param {object} msg Discord message
+ * @param {object} client Discord client
+ * @param {object} dependencies Optional injectable functions for deterministic tests.
+ */
+async function onMessage(msg, client, dependencies = {}) {
   if (msg.author.bot || !msg.guild) return;
   if (!msg.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true })) return;
 
@@ -59,12 +64,13 @@ async function onMessage(msg, client) {
     if (urls.length || images.length) {
       const url = urls.find(u => platforms.fromUrl(u));
       if (!url && !images.length) return await reply({ content: '🔗 Ce lien n\'est ni Leboncoin ni Vinted. Envoie une **capture d\'écran** de l\'annonce à la place.' });
-      const result = await analyse({ url, imageUrls: url ? [] : images, text: text.replace(/https?:\/\/\S+/g, '').trim() });
+      const result = await (dependencies.analyse || analyse)({ url, imageUrls: url ? [] : images, text: text.replace(/https?:\/\/\S+/g, '').trim() });
       return await reply(analysisMessage(result));
     }
     const { query, maxPrice, exclude } = parseQuery(text);
     if (query.length < 2) return await reply({ content: HELP });
-    return await reply(marketMessage(await marketReport({ query, maxPrice, exclude })));
+    const report = await (dependencies.marketReport || marketReport)({ query, maxPrice, exclude });
+    return await reply(marketMessage(report));
   } catch (e) {
     console.error('[mention]', e.message);
     await reply({ content: `❌ ${e.message}` }).catch(() => {});

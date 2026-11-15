@@ -83,14 +83,13 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   console.log('ok marché');
 
   // 5. analyse par lien
-  const { analyse } = require('./analyse');
-  const an = await analyse({ url: 'https://fake/42' });
+  const an = await require('./analyse').analyse({ url: 'https://fake/42' });
   assert.strictEqual(an.ad.price, 90);
   assert(an.assessment.risk >= 50, 'risk ' + an.assessment.risk); // 90 € vs ~310 + whatsapp + 0 avis
   const am = analysisMessage(an);
   assert(am.embeds[0].data.title.includes('risque'));
-  await assert.rejects(analyse({ url: 'https://exemple.com/x' }), /non reconnu/);
-  await assert.rejects(analyse({ imageUrls: ['http://img/x.png'] }), /ANTHROPIC_API_KEY/);
+  await assert.rejects(require('./analyse').analyse({ url: 'https://exemple.com/x' }), /non reconnu/);
+  await assert.rejects(require('./analyse').analyse({ imageUrls: ['http://img/x.png'] }), /ANTHROPIC_API_KEY/);
   console.log('ok analyse lien', an.assessment.risk);
 
   // 6. capture d'écran (API Anthropic simulée)
@@ -104,7 +103,7 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
       description: 'ecrire sur whatsapp', search_query: 'rtx 3070ti', red_flags: ['contact WhatsApp'] }) + '\n```';
     return new Response(JSON.stringify({ content: [{ type: 'text', text }] }), { headers: { 'content-type': 'application/json' } });
   };
-  const shot = await analyse({ imageUrls: ['http://img/a.png'] });
+  const shot = await require('./analyse').analyse({ imageUrls: ['http://img/a.png'] });
   assert.strictEqual(shot.ad.price, 90); assert(shot.assessment.risk >= 60, 'shot ' + shot.assessment.risk);
   assert(shot.assessment.reasons.some(x => x.text.startsWith('Capture')));
   global.fetch = realFetch; delete process.env.ANTHROPIC_API_KEY;
@@ -128,8 +127,10 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   const client = { user: { id: '123' } };
   const msg = txt => ({ author: { id: 'u' + Math.random(), bot: false }, guild: {}, content: txt, attachments: new Map(),
     mentions: { has: () => true }, channel: { sendTyping: async () => {} }, reply: async p => replies.push(p) });
-  await onMessage(msg('<@123> rtx 3070ti max 250€'), client);
-  assert(replies[0].embeds.length === 2 && replies[0].allowedMentions.parse.length === 0);
+  const deterministicMarketReport = async () => rep;
+  await onMessage(msg('<@123> rtx 3070ti max 250€'), client, { marketReport: deterministicMarketReport });
+  assert.strictEqual(replies[0].embeds.length, 2, 'mention search should render summary + one deal embed');
+  assert.deepStrictEqual(replies[0].allowedMentions, { parse: [], repliedUser: false }, 'mention reply must suppress mentions');
   await onMessage(msg('<@123> https://fake/7'), client);
   assert(replies[1].embeds[0].data.title.includes('risque'));
   await onMessage(msg('<@123>'), client);
