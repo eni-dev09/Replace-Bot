@@ -12,6 +12,8 @@ const platformChoices = [
   { name: 'Toutes les plateformes', value: 'all' },
   ...platforms.ids.map(id => ({ name: platforms.get(id).label, value: id })),
 ];
+// '*' = « toutes les plateformes disponibles au moment du scan » (une plateforme ajoutée plus tard est prise en compte)
+const labelOf = p => (p === '*' ? 'toutes' : platforms.get(p)?.label || p);
 const resolvePlatforms = v => (!v || v === 'all' ? [...platforms.ids] : [v]);
 
 const radarCmd = new SlashCommandBuilder()
@@ -65,13 +67,13 @@ async function handleRadar(i) {
       channelId: channel.id,
       keyword: i.options.getString('produit').trim(),
       maxPrice: i.options.getNumber('prix_max'),
-      platforms: resolvePlatforms(i.options.getString('plateforme')),
+      platforms: ['all', null, undefined].includes(i.options.getString('plateforme')) ? ['*'] : [i.options.getString('plateforme')],
       minDiscount: (i.options.getInteger('remise_min') ?? 20) / 100,
       roleId: i.options.getRole('role')?.id || null,
       exclude: (i.options.getString('exclure') || '').split(',').map(x => x.trim()).filter(Boolean),
       createdBy: i.user.id,
     });
-    const where = target.platforms.map(p => platforms.get(p).label).join(', ');
+    const where = target.platforms.map(labelOf).join(', ');
     return i.reply(created
       ? `✅ Alerte **${target.keyword}** ≤ ${eur(target.maxPrice)} (−${Math.round(target.minDiscount * 100)} % min) sur ${where} → ${channel}` +
         `${target.roleId ? ` · ping <@&${target.roleId}>` : ''}${target.exclude.length ? ` · exclut : ${target.exclude.join(', ')}` : ''}\nPremier scan dans quelques instants. ID : \`${target.id}\``
@@ -83,7 +85,7 @@ async function handleRadar(i) {
     if (!list.length) return i.reply({ content: 'Aucune alerte. Crée-en une avec `/radar add`.', ...ephemeral });
     const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📡 Alertes actives')
       .setDescription(list.slice(0, 25).map(t =>
-        `\`${t.id}\` **${t.keyword}** ≤ ${eur(t.maxPrice)} · −${Math.round(t.minDiscount * 100)} % · ${t.platforms.map(p => platforms.get(p).label).join('/')} · <#${t.channelId}>`
+        `\`${t.id}\` **${t.keyword}** ≤ ${eur(t.maxPrice)} · −${Math.round(t.minDiscount * 100)} % · ${t.platforms.map(labelOf).join('/')} · <#${t.channelId}>`
       ).join('\n'));
     return i.reply({ embeds: [embed], ...ephemeral });
   }

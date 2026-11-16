@@ -31,7 +31,9 @@ function assess(ad, market = {}) {
 
   // --- Prix vs marché ---
   let priceRatio = null;
-  if (ad.price > 0 && market.median > 0 && market.n >= 3) {
+  if (ad.auction) {
+    reasons.push({ type: 'info', text: 'Enchère en cours : le prix actuel n\'est pas le prix final, comparaison au marché non pertinente' });
+  } else if (ad.price > 0 && market.median > 0 && market.n >= 3) {
     priceRatio = ad.price / market.median;
     const pct = Math.round(Math.abs(1 - priceRatio) * 100);
     if (priceRatio < 0.35) add(40, 'bad', `Prix **${pct} % sous** la médiane : très suspect (arnaque, pièce détachée ou lot incomplet)`);

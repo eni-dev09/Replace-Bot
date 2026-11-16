@@ -16,9 +16,10 @@ module.exports = {
   emoji: '🟠',
   color: 0xff6e14,
   available: detect(),
+  unavailableReason: 'Python + lib lbc absents',
 
   parseUrl(url) {
-    const m = /leboncoin\.fr\/(?:[^?#\s]*\/)?(\d{7,})/.exec(url);
+    const m = /^https?:\/\/(?:[a-z0-9-]+\.)*leboncoin\.fr\/(?:[^?#\s]*\/)?(\d{7,})/i.exec(String(url).trim());
     return m ? m[1] : null;
   },
 
