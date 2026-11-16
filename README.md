@@ -44,8 +44,22 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
   C'est une **estimation**, jamais une garantie.
 - **Radar** : deal = prix ≤ médiane × (1 − remise_min) ; déduplication persistante ; ping de rôle une fois par scan.
 
+## Activer eBay (API officielle)
+1. Crée un compte sur **developer.ebay.com**, puis *Application Keys* → jeu de clés de **production** (pas « Sandbox »).
+2. Mets l'**App ID** dans `EBAY_CLIENT_ID` et le **Cert ID** dans `EBAY_CLIENT_SECRET` (`.env`), puis redémarre.
+   Sans ces deux variables, eBay est désactivé automatiquement (le log l'indique).
+3. eBay peut exiger, pour activer les clés de production, de configurer la notification « Marketplace Account Deletion »
+   ou de demander une exemption (le bot ne stocke aucune donnée eBay) : c'est à faire dans ton compte développeur.
+- Marché par défaut : `EBAY_MARKETPLACE=EBAY_FR`, devise `EUR`. Les annonces dans une autre devise sont ignorées.
+- Les **enchères** sont exclues des prix du marché (le prix d'une enchère en cours n'est pas un prix de vente) ; les annonces
+  « pour pièces » aussi. Les **frais de port fixes** sont inclus dans le prix comparé (indiqué dans l'embed) ; un port « calculé »
+  n'est pas ajouté.
+- Liens d'annonce eBay reconnus par `@bot <lien>` et `/analyse` (annonces à variantes : envoyer une capture).
+- `/radar add` avec « toutes les plateformes » prend en compte les plateformes activées **au moment du scan** (donc eBay dès
+  qu'il est activé). Les anciennes alertes créées avant la v2.1 gardent leur liste : recrée-les pour inclure eBay.
+
 ## Ajouter une plateforme
-`bot/platforms/<nom>.js` : `{ id, label, emoji, color, available, search(), parseUrl(), getAd() }`
+`bot/platforms/<nom>.js` : `{ id, label, emoji, color, available, unavailableReason, search(), parseUrl(), getAd() }`
 (voir `vinted.js`), puis la déclarer dans `bot/platforms/index.js`.
 
 ## Notes

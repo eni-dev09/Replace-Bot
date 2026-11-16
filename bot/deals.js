@@ -15,6 +15,7 @@ const JUNK = [
 ];
 
 function isJunk(ad, queryNorm) {
+  if (ad.junk) return true; // marqué par la plateforme (ex. eBay « pour pièces »)
   const t = norm(ad.title);
   return JUNK.some(re => re.test(t) && !re.test(queryNorm));
 }

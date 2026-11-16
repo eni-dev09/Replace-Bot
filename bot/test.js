@@ -8,6 +8,8 @@ const { assess } = require('./trust');
 const store = require('./store');
 const platforms = require('./platforms');
 const radar = require('./radar');
+process.env.EBAY_MIN_GAP_MS = '0';
+for (const id of Object.keys(platforms.platforms)) delete platforms.platforms[id]; // tests isolés : aucun appel réseau réel
 
 const mk = (id, price, extra = {}) => ({ id, platform: 'fake', title: 'iPhone t' + id, price, url: 'http://x/' + id, ...extra });
 const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fake', title, price, url: 'http://x/' + id, location: 'Paris', condition: 'bon', ...extra });
@@ -216,6 +218,62 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   await onMessage(msg('<@123>'), client);
   assert(replies[2].content.includes('Écris-moi un produit'));
   console.log('ok mention');
+
+  // 7b. non-régression : enchère jugée sur son prix, message de lien, lien suivi de ponctuation
+  const auc = assess({ title: 'x', price: 20, auction: true, sellerRating: 4.9, sellerReviews: 50 }, { median: 300, n: 20 });
+  assert(auc.risk < 25 && auc.reasons.some(x => x.text.includes('Enchère en cours')), 'enchère ' + auc.risk);
+  await assert.rejects(require('./analyse').analyse({ url: 'https://exemple.com/x' }), /Lien non reconnu : je gère les liens .*Leboncoin.*Vinted.*eBay/);
+  assert.strictEqual(platforms.fromUrl('https://notleboncoin.fr/ad/x/2123456789'), null);
+  const punct = [];
+  await onMessage({ author: { id: 'up', bot: false }, guild: {}, content: '<@123> regarde https://exemple.com/x).', attachments: new Map(),
+    mentions: { has: () => true }, channel: { sendTyping: async () => {} }, reply: async p => punct.push(p) }, client);
+  assert(punct[0].content.includes('pas pris en charge') && punct[0].content.includes('eBay'));
+  console.log('ok non-régression bot');
+
+  // 8. eBay de bout en bout (API simulée) : marché, analyse par lien, mention, alerte « toutes plateformes »
+  delete platforms.platforms.fake;
+  process.env.EBAY_CLIENT_ID = 'cid'; process.env.EBAY_CLIENT_SECRET = 'sec';
+  const ebay = require('./platforms/ebay'); ebay._resetSession();
+  platforms.platforms.ebay = ebay;
+  const eItem = (n, price, extra = {}) => ({ itemId: `v1|${100000000000 + n}|0`, title: `RTX 3070 Ti Gigabyte ${n}`, price: { value: String(price), currency: 'EUR' },
+    image: { imageUrl: `https://i.ebayimg.com/${n}.jpg` }, itemWebUrl: `https://www.ebay.fr/itm/${100000000000 + n}`, condition: 'D\'occasion', conditionId: '3000',
+    buyingOptions: ['FIXED_PRICE'], seller: { username: `s${n}`, feedbackPercentage: '99.5', feedbackScore: 120 }, itemLocation: { country: 'FR' }, ...extra });
+  const ebayItems = [eItem(1, 290), eItem(2, 300), eItem(3, 310), eItem(4, 320), eItem(5, 330), eItem(6, 295),
+    eItem(7, 200, { shippingOptions: [{ shippingCostType: 'FIXED', shippingCost: { value: '0.00', currency: 'EUR' } }] }),
+    eItem(8, 10, { title: 'Support carte graphique RTX 3070 Ti' }), eItem(9, 400, { buyingOptions: ['AUCTION'] })];
+  const realFetch4 = global.fetch;
+  global.fetch = async url => {
+    const j = (s, b) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } });
+    if (String(url).includes('/oauth2/token')) return j(200, { access_token: 'tk', expires_in: 7200 });
+    if (String(url).includes('get_item_by_legacy_id')) return j(200, { ...eItem(99, 90), description: '<p>Dispo vite, contactez-moi sur WhatsApp</p>' });
+    return j(200, { itemSummaries: ebayItems });
+  };
+  const { analyse } = require('./analyse');
+  const erep = await marketReport({ query: 'rtx 3070 ti', platformIds: ['ebay'] });
+  assert.strictEqual(erep.errors.length, 0);
+  assert.strictEqual(erep.overall.n, 7);              // enchère et support exclus
+  assert.strictEqual(erep.overall.median, 300);
+  assert.strictEqual(erep.best[0].id, 'ebay-100000000007'); assert.strictEqual(erep.best[0].ratio, 33);
+  const ean = await analyse({ url: 'https://www.ebay.fr/itm/RTX-3070-Ti/100000000099?hash=x' });
+  assert.strictEqual(ean.ad.platform, 'ebay'); assert.strictEqual(ean.market.scope, 'eBay');
+  assert(ean.assessment.risk >= 60 && ean.assessment.reasons.some(x => /WhatsApp/i.test(x.text)), 'ebay risk ' + ean.assessment.risk);
+  const eReplies = [];
+  await onMessage({ author: { id: 'ue', bot: false }, guild: {}, content: '<@123> https://www.ebay.fr/itm/100000000099', attachments: new Map(),
+    mentions: { has: () => true }, channel: { sendTyping: async () => {} }, reply: async p => eReplies.push(p) }, client);
+  assert(eReplies[0].embeds[0].data.title.includes('risque'), 'mention ebay');
+  // alerte créée avec « toutes » (*) : eBay pris en compte même s'il a été activé après la création
+  const wild = store.addTarget({ guildId: 'g2', channelId: 'c2', keyword: 'rtx 3070 ti', maxPrice: 250, platforms: ['*'], minDiscount: 0.2 }).target;
+  sent.length = 0;
+  const rw = await radar.scanTarget(wild);
+  assert.deepStrictEqual(rw.errors, []); assert.strictEqual(rw.posted, 1);
+  assert(sent[0].embeds[0].data.fields.some(f => f.name === 'Livraison' && f.value === 'gratuite'));
+  global.fetch = realFetch4;
+  // un identifiant eBay invalide ne casse pas le rapport : l'erreur est remontée proprement
+  global.fetch = async () => new Response('{"error":"invalid_client"}', { status: 401 }); ebay._resetSession();
+  const bad = await marketReport({ query: 'rtx 3070 ti', platformIds: ['ebay'] });
+  assert(bad.errors[0].includes('identifiants invalides')); assert.strictEqual(bad.best.length, 0);
+  global.fetch = realFetch4; ebay._resetSession();
+  console.log('ok ebay de bout en bout');
 
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);

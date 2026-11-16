@@ -34,7 +34,8 @@ const radar = {
     const out = { posted: 0, found: 0, errors: [] };
     let fresh = [];
 
-    for (const pid of t.platforms) {
+    const list = t.platforms.includes('*') ? platforms.ids : t.platforms;
+    for (const pid of list) {
       if (!platforms.platforms[pid]) { out.errors.push(`${pid}: plateforme indisponible`); continue; }
       try {
         const { deals } = await this.searchPlatform(pid, t);

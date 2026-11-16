@@ -1,14 +1,15 @@
-// Registre des plateformes. Pour en ajouter une (eBay, Back Market...) :
-// créer bot/platforms/<nom>.js exportant { id, label, emoji, color, available, search({query,maxPrice,limit}) }
+// Registre des plateformes. Pour en ajouter une (Back Market...) :
+// créer bot/platforms/<nom>.js exportant { id, label, emoji, color, available, unavailableReason, search({query,maxPrice,limit}), parseUrl, getAd }
 // qui renvoie des annonces normalisées, puis l'ajouter ci-dessous.
 const all = {
   leboncoin: require('./leboncoin'),
   vinted: require('./vinted'),
+  ebay: require('./ebay'),
 };
 
 const platforms = {};
 for (const [id, p] of Object.entries(all)) {
-  if (p.available === false) console.warn(`[platforms] ${p.label} désactivé (prérequis absents : Python + lib lbc)`);
+  if (p.available === false) console.warn(`[platforms] ${p.label} désactivé (${p.unavailableReason || 'prérequis absents'})`);
   else platforms[id] = p;
 }
 
@@ -21,8 +22,12 @@ function fromUrl(url) {
   return null;
 }
 
+// Libellés des plateformes dont je sais lire les liens (pour les messages d'aide).
+const labels = () => Object.values(all).filter(p => p.parseUrl).map(p => p.label);
+
 module.exports = {
   fromUrl,
+  labels,
   platforms,
   get ids() { return Object.keys(platforms); },
   get: id => platforms[id] || all[id], // all[id] : anciennes alertes d'une plateforme désactivée

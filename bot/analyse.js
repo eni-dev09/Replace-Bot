@@ -19,7 +19,7 @@ async function analyse({ url, imageUrls = [], text = '' }) {
   let ad;
   if (url) {
     const hit = platforms.fromUrl(url);
-    if (!hit) throw new Error('Lien non reconnu : je gère les liens Leboncoin et Vinted. Sinon envoie une **capture d\'écran**.');
+    if (!hit) throw new Error(`Lien non reconnu : je gère les liens ${platforms.labels().join(', ')}. Sinon envoie une **capture d'écran**.`);
     if (!hit.available) throw new Error(`${hit.platform.label} n'est pas activé sur cet hébergement : envoie plutôt une **capture d'écran** de l'annonce.`);
     ad = await hit.platform.getAd(hit.id);
   } else if (imageUrls.length) {

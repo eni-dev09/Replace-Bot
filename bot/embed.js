@@ -22,6 +22,9 @@ function dealMessage(deal, keyword) {
     .setFooter({ text: `Radar « ${keyword} »` })
     .setTimestamp();
   if (deal.location) embed.addFields({ name: 'Lieu', value: deal.location, inline: true });
+  if (deal.platform === 'ebay') {
+    embed.addFields({ name: 'Livraison', value: deal.shippingCost == null ? 'à calculer (non incluse)' : deal.shippingCost === 0 ? 'gratuite' : `${eur(deal.shippingCost)} (incluse dans le prix)`, inline: true });
+  }
   if (deal.size) embed.addFields({ name: 'Taille', value: deal.size, inline: true });
   if (deal.brand) embed.addFields({ name: 'Marque', value: deal.brand, inline: true });
   if (deal.image) embed.setImage(deal.image);

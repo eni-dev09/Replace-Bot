@@ -26,7 +26,7 @@ function parseQuery(text) {
 }
 
 const HELP = '👋 Écris-moi un produit : `@bot rtx 3070ti` (option : `max 300€`, `-coque` pour exclure un mot).\n' +
-  'Ou envoie-moi **le lien** d\'une annonce Leboncoin/Vinted, ou une **capture d\'écran**, pour savoir si elle est fiable.';
+  'Ou envoie-moi **le lien** d\'une annonce (Leboncoin, Vinted, eBay), ou une **capture d\'écran**, pour savoir si elle est fiable.';
 
 /**
  * @param {object} msg Discord message
@@ -44,7 +44,7 @@ async function onMessage(msg, client, dependencies = {}) {
   last.set(msg.author.id, now);
 
   const text = msg.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
-  const urls = text.match(/https?:\/\/[^\s<>]+/g) || [];
+  const urls = (text.match(/https?:\/\/[^\s<>]+/g) || []).map(u => u.replace(/[)\]}>.,;!?'"]+$/, ''));
   let images = [...msg.attachments.values()].filter(a => a.contentType?.startsWith('image/')).map(a => a.url);
 
   // Réponse à un message contenant une capture
@@ -63,7 +63,7 @@ async function onMessage(msg, client, dependencies = {}) {
   try {
     if (urls.length || images.length) {
       const url = urls.find(u => platforms.fromUrl(u));
-      if (!url && !images.length) return await reply({ content: '🔗 Ce lien n\'est ni Leboncoin ni Vinted. Envoie une **capture d\'écran** de l\'annonce à la place.' });
+      if (!url && !images.length) return await reply({ content: `🔗 Ce lien n'est pas pris en charge (${platforms.labels().join(', ')}). Envoie une **capture d'écran** de l'annonce à la place.` });
       const result = await (dependencies.analyse || analyse)({ url, imageUrls: url ? [] : images, text: text.replace(/https?:\/\/\S+/g, '').trim() });
       return await reply(analysisMessage(result));
     }
