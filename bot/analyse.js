@@ -31,7 +31,7 @@ async function analyse({ url, imageUrls = [], text = '' }) {
 
   const query = ad.searchQuery || (await ai.suggestQuery(ad.title, ad.description)) || deriveQuery(ad.title);
   // titre dérivé = moins fiable que la saisie de l'utilisateur : on tolère 60 % de mots communs
-  const report = await marketReport({ query, minMatch: 0.6, excludeId: ad.id, minDiscount: 0.15 });
+  const report = await marketReport({ query, minMatch: 0.6, excludeId: ad.id, minDiscount: 0.15, includePromos: false });
 
   // On compare d'abord à la plateforme de l'annonce si l'échantillon est assez gros
   const own = report.perPlatform.find(p => p.pid === String(ad.platform).toLowerCase() && p.stats.n >= 5);

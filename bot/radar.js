@@ -2,7 +2,7 @@
 // détecte les deals et les poste dans le salon Discord configuré.
 const store = require('./store');
 const platforms = require('./platforms');
-const { findDeals } = require('./deals');
+const { findDeals, filterPromos } = require('./deals');
 const { dealMessage } = require('./embed');
 
 const SCAN_LIMIT = 40;
@@ -24,6 +24,14 @@ const radar = {
   // Une plateforme -> deals (pas de post). Utilisé par /radar scan et /search.
   async searchPlatform(platformId, { keyword, maxPrice, minDiscount, exclude = [] }) {
     const p = platforms.get(platformId);
+    if (p.kind === 'promo') {
+      // Bons plans : pas de médiane ; filtrés par mot-clé (côté source), budget et mots exclus
+      const ads = await p.search({ query: keyword, limit: SCAN_LIMIT });
+      const deals = filterPromos(ads, { maxPrice, exclude }).map(a => ({
+        ...a, promo: true, ratio: a.originalPrice ? Math.round(((a.originalPrice - a.price) / a.originalPrice) * 100) : 0,
+      }));
+      return { ads, median: 0, stats: { n: 0 }, sample: [], deals };
+    }
     // Pas de plafond de prix côté plateforme : il fausserait la médiane (appliqué ensuite sur les deals)
     const ads = await p.search({ query: keyword, limit: SCAN_LIMIT });
     return { ads, ...findDeals(ads, { maxPrice, minDiscount, query: keyword, exclude }) };
@@ -120,6 +128,9 @@ const radar = {
     setTimeout(run, 15000); // 1er scan peu après le démarrage
     this.timer = setInterval(run, this.intervalMin * 60000);
     console.log(`[radar] actif — scan toutes les ${this.intervalMin} min`);
+    if (platforms.ids.includes('dealabs') && this.intervalMin > 15) {
+      console.warn('[radar] Dealabs : le flux ne couvre que ~20 min de deals ; mets DEAL_RADAR_INTERVAL_MIN ≤ 15 pour n\'en rater aucun');
+    }
   },
 };
 
