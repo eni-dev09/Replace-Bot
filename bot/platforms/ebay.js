@@ -181,7 +181,8 @@ function normalize(it, { keepAuctions = false } = {}) {
     sellerName: s.username || 'Vendeur eBay',
     sellerRating: Number.isFinite(pct) ? Math.round((pct / 20) * 10) / 10 : (score === 0 ? 0 : null), // % positifs -> /5
     sellerReviews: score,
-    delivery: true,
+    delivery: Array.isArray(it.shippingOptions) ? it.shippingOptions.length > 0 : true,
+    country: it.itemLocation?.country || '',
     auction,
     junk: Number(it.conditionId) === 7000 || cond === 'pour pièces', // « pour pièces » : exclu du calcul
     risky: false,

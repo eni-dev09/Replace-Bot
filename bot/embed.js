@@ -1,5 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { get } = require('./platforms');
+const { inFrance } = require('./deals');
 
 const eur = n => `${Number.isInteger(n) ? n : n.toFixed(2)} €`;
 
@@ -46,6 +47,9 @@ function dealMessage(deal, keyword) {
     )
     .setFooter({ text: `Radar « ${keyword} »` })
     .setTimestamp();
+  const fr = inFrance(deal);
+  const tags = [fr === true ? '🇫🇷 France' : fr === false ? '🌍 Étranger' : '', deal.delivery === true ? '📦 Livraison dispo' : deal.delivery === false ? '🤝 Remise en main propre' : ''].filter(Boolean);
+  if (tags.length) embed.addFields({ name: 'Origine / livraison', value: tags.join(' · '), inline: false });
   if (deal.location) embed.addFields({ name: 'Lieu', value: deal.location, inline: true });
   if (deal.platform === 'ebay') {
     embed.addFields({ name: 'Livraison', value: deal.shippingCost == null ? 'à calculer (non incluse)' : deal.shippingCost === 0 ? 'gratuite' : `${eur(deal.shippingCost)} (incluse dans le prix)`, inline: true });
