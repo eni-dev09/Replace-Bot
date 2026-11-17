@@ -92,4 +92,19 @@ function filterPromos(ads, { maxPrice = 0, exclude = [] } = {}) {
   });
 }
 
-module.exports = { filterPromos, norm, squash, tokens, isJunk, relevantAds, stats, median, findDeals };
+const FR = /^(fr|france)$/i;
+/** true = France, false = étranger connu, null = inconnu. Leboncoin et Dealabs sont français par nature. */
+function inFrance(a) {
+  if (a.platform === 'leboncoin' || a.platform === 'dealabs') return true;
+  const c = String(a.country || '').trim();
+  if (c) return FR.test(c);
+  const m = /,\s*([A-Za-z]{2})$/.exec(String(a.location || ''));
+  return m ? FR.test(m[1]) : null;
+}
+/** Bonus de classement : livraison dispo et vendeur en France passent devant, l'étranger/sans livraison recule. */
+function priority(a) {
+  const fr = inFrance(a);
+  return (a.delivery === true ? 10 : a.delivery === false ? -10 : 0) + (fr === true ? 15 : fr === false ? -20 : 0);
+}
+
+module.exports = { inFrance, priority, filterPromos, norm, squash, tokens, isJunk, relevantAds, stats, median, findDeals };

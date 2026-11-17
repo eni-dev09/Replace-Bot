@@ -2,12 +2,12 @@
 // détecte les deals et les poste dans le salon Discord configuré.
 const store = require('./store');
 const platforms = require('./platforms');
-const { findDeals, filterPromos } = require('./deals');
+const { findDeals, filterPromos, priority } = require('./deals');
 const { dealMessage } = require('./embed');
 
 const SCAN_LIMIT = 40;
-const FIRST_SCAN_MAX_POSTS = 5; // au 1er scan d'une target : on poste seulement les meilleurs
-const MAX_POSTS_PER_TARGET = 8; // anti-flood par scan
+const FIRST_SCAN_MAX_POSTS = 10; // au 1er scan d'une target : on poste seulement les meilleurs
+const MAX_POSTS_PER_TARGET = 25; // anti-flood par scan
 const POST_DELAY_MS = 1200;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -59,7 +59,7 @@ const radar = {
     }
 
     // meilleures remises d'abord
-    const rank = x => x.d.ratio - (x.d.suspicious ? 100 : 0);
+    const rank = x => x.d.ratio + priority(x.d) - (x.d.suspicious ? 100 : 0);
     fresh.sort((a, b) => rank(b) - rank(a));
     const cap = isFirst ? FIRST_SCAN_MAX_POSTS : MAX_POSTS_PER_TARGET;
     const toPost = fresh.slice(0, cap);

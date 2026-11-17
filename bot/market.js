@@ -1,6 +1,6 @@
 // Rapport de marché : interroge les plateformes, calcule la médiane et les meilleures offres.
 const platforms = require('./platforms');
-const { findDeals, stats, filterPromos } = require('./deals');
+const { findDeals, stats, filterPromos, priority } = require('./deals');
 const { assess } = require('./trust');
 const { cached } = require('./cache');
 
@@ -52,7 +52,7 @@ async function marketReport({ query, maxPrice = 0, platformIds = platforms.ids, 
     }
   }
   // meilleure remise d'abord ; suspects et annonces à risque élevé relégués
-  const rank = c => c.ratio - (c.suspicious ? 100 : 0) - (c.risk.risk >= 50 ? 40 : 0);
+  const rank = c => c.ratio + priority(c) - (c.suspicious ? 100 : 0) - (c.risk.risk >= 50 ? 40 : 0);
   cand.sort((a, b) => rank(b) - rank(a));
 
   return { query, maxPrice, perPlatform, overall, best: cand.slice(0, 5), promos: promos.slice(0, 3), errors };

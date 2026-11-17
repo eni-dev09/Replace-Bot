@@ -316,6 +316,32 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   delete platforms.platforms.dealabs;
   console.log('ok dealabs de bout en bout');
 
+  // 6. priorité livraison + France
+  const { inFrance, priority } = require('./deals');
+  assert.strictEqual(inFrance({ platform: 'leboncoin' }), true);
+  assert.strictEqual(inFrance({ platform: 'ebay', country: 'FR' }), true);
+  assert.strictEqual(inFrance({ platform: 'ebay', country: 'DE' }), false);
+  assert.strictEqual(inFrance({ platform: 'ebay', location: 'Lyon, FR' }), true);
+  assert.strictEqual(inFrance({ platform: 'vinted', country: 'Allemagne' }), false);
+  assert.strictEqual(inFrance({ platform: 'vinted', country: 'France' }), true);
+  assert.strictEqual(inFrance({ platform: 'vinted' }), null);
+  assert(priority({ platform: 'ebay', country: 'FR', delivery: true }) > priority({ platform: 'ebay', country: 'DE', delivery: true }));
+  assert(priority({ platform: 'ebay', country: 'FR', delivery: true }) > priority({ platform: 'ebay', country: 'FR', delivery: false }));
+  // le radar poste d'abord l'annonce française avec livraison, même avec une remise un peu plus faible
+  const pt = store.addTarget({ guildId: 'g4', channelId: 'c4', keyword: 'zzz prio', maxPrice: 500, platforms: ['prio'], minDiscount: 0.2 }).target;
+  const pm = (id, price, extra) => ({ id: 'prio-' + id, platform: 'prio', title: 'zzz prio ' + id, price, url: 'http://x/' + id, ...extra });
+  platforms.platforms.prio = { id: 'prio', label: 'Prio', emoji: '🧪', color: 1, search: async () => [
+    pm(1, 100), pm(2, 100), pm(3, 100), pm(4, 100),
+    pm(5, 70, { country: 'DE', delivery: true }), pm(6, 75, { country: 'FR', delivery: true }), pm(7, 74, { country: 'FR', delivery: false })] };
+  sent.length = 0;
+  const rp = await radar.scanTarget(pt);
+  assert.strictEqual(rp.posted, 3);
+  assert(sent[0].embeds[0].data.title.includes('zzz prio 6'), sent[0].embeds[0].data.title);
+  assert(sent[2].embeds[0].data.title.includes('zzz prio 5'));
+  assert(JSON.stringify(sent[0].embeds[0].data).includes('Livraison dispo'));
+  delete platforms.platforms.prio;
+  console.log('ok priorité livraison/France');
+
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);
   console.log('ok commandes:', cmds.definitions.map(c => c.name).join(', '));
