@@ -82,4 +82,14 @@ function findDeals(ads, { maxPrice = 0, minDiscount = 0.2, query = '', minMatch 
   return { median: st.median, stats: st, sample, deals };
 }
 
-module.exports = { norm, squash, tokens, isJunk, relevantAds, stats, median, findDeals };
+/** Promos (Dealabs) : filtre mots exclus et budget (un prix inconnu est écarté si un budget est fixé). */
+function filterPromos(ads, { maxPrice = 0, exclude = [] } = {}) {
+  const ex = exclude.map(norm).filter(Boolean);
+  return ads.filter(a => {
+    if (ex.some(w => norm(a.title).includes(w))) return false;
+    if (maxPrice > 0 && !(a.price != null && a.price <= maxPrice)) return false;
+    return true;
+  });
+}
+
+module.exports = { filterPromos, norm, squash, tokens, isJunk, relevantAds, stats, median, findDeals };

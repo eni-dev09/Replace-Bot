@@ -275,6 +275,47 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   global.fetch = realFetch4; ebay._resetSession();
   console.log('ok ebay de bout en bout');
 
+  // 5. Dealabs de bout en bout (flux RSS simulé)
+  const dealabs = require('./platforms/dealabs'); dealabs._resetCache();
+  platforms.platforms.dealabs = dealabs;
+  const dItem = (id, title, price, extra = '') => `<item><title><![CDATA[${title}]]></title><category>Informatique</category>${price != null ? `<pepper:merchant name="Cdiscount" price="${price}"/>` : ''}<link>https://www.dealabs.com/bons-plans/x-${id}</link><pubDate>Mon, 16 Nov 2026 07:2${id % 10}:00 +0100</pubDate><description><![CDATA[${extra}]]></description></item>`;
+  const feed = `<?xml version="1.0"?><rss version="2.0" xmlns:pepper="http://www.pepper.com/rss"><channel>${[
+    dItem(1, 'Carte graphique RTX 3070 Ti 8 Go', '329,99€', 'au lieu de 499 €'),
+    dItem(2, 'RTX 3070 Ti coque HS', '120€'),
+    dItem(3, 'RTX 3070 Ti Asus', '650€'),
+    dItem(4, 'RTX 3070 Ti sans prix', null),
+  ].join('')}</channel></rss>`;
+  const realFetch5 = global.fetch;
+  global.fetch = async () => new Response(feed, { status: 200 });
+  const drep = await marketReport({ query: 'rtx 3070 ti', platformIds: ['dealabs'] });
+  assert.strictEqual(drep.best.length, 0);                 // pas une place d'occasion : jamais dans les offres/médiane
+  assert.strictEqual(drep.overall.n || 0, 0);
+  assert.deepStrictEqual(drep.promos.map(p => p.id), ['dealabs-4', 'dealabs-3', 'dealabs-2']);  // 3 max, plus récent d'abord
+  const dbud = await marketReport({ query: 'rtx 3070 ti', maxPrice: 400, platformIds: ['dealabs'] });
+  assert.deepStrictEqual(dbud.promos.map(p => p.id).sort(), ['dealabs-1', 'dealabs-2']);  // budget : prix inconnu et trop cher écartés
+  const dex = await marketReport({ query: 'rtx 3070 ti', exclude: ['coque'], platformIds: ['dealabs'] });
+  assert(!dex.promos.some(p => p.id === 'dealabs-2'));
+  const dmsg = marketMessage(dbud);
+  assert(dmsg.embeds.some(e => /329\.99/.test(JSON.stringify(e.data))), 'promo dans le message');
+  assert(dmsg.embeds.length <= 10);
+  // radar : une promo est postée avec le message promo, une seule fois
+  const dt = store.addTarget({ guildId: 'g3', channelId: 'c3', keyword: 'rtx 3070 ti', maxPrice: 400, platforms: ['dealabs'], minDiscount: 0.2, exclude: ['coque'] }).target;
+  sent.length = 0;
+  const rd = await radar.scanTarget(dt);
+  assert.deepStrictEqual(rd.errors, []); assert.strictEqual(rd.posted, 1);
+  assert(JSON.stringify(sent[0].embeds[0].data).includes('329.99'));
+  assert.strictEqual((await radar.scanTarget(dt)).posted, 0);
+  // analyse d'un lien Dealabs : pas une annonce d'occasion -> refus lisible, pas de crash
+  const dan = await analyse({ url: 'https://www.dealabs.com/bons-plans/x-1' }).catch(e => e);
+  assert(dan && (dan.error || dan.message), 'analyse dealabs');
+  // flux en panne : l'erreur est remontée, le rapport reste valide
+  dealabs._resetCache(); global.fetch = async () => new Response('', { status: 429 });
+  const dbad = await marketReport({ query: 'rtx 3070 ti', platformIds: ['dealabs'] });
+  assert(dbad.errors[0].includes('accès limité')); assert.strictEqual(dbad.promos.length, 0);
+  global.fetch = realFetch5; dealabs._resetCache();
+  delete platforms.platforms.dealabs;
+  console.log('ok dealabs de bout en bout');
+
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);
   console.log('ok commandes:', cmds.definitions.map(c => c.name).join(', '));

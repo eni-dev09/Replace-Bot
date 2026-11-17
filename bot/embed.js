@@ -3,7 +3,32 @@ const { get } = require('./platforms');
 
 const eur = n => `${Number.isInteger(n) ? n : n.toFixed(2)} €`;
 
+/** Embed d'un bon plan Dealabs (pas de médiane : prix, marchand, remise annoncée). */
+function promoEmbed(d, footer) {
+  const p = get('dealabs');
+  const priceTxt = d.price == null ? 'prix non indiqué' : d.price === 0 ? '**Gratuit**' : `**${eur(d.price)}**`;
+  let desc = `${priceTxt}${d.merchant ? ` chez **${clip(d.merchant, 60)}**` : ''}`;
+  if (d.price != null && d.originalPrice > d.price) {
+    desc += ` · au lieu de ${eur(d.originalPrice)} (−${Math.round(((d.originalPrice - d.price) / d.originalPrice) * 100)} % annoncé)`;
+  }
+  const e = new EmbedBuilder().setColor(p?.color ?? 0x2f9e44).setTitle(`🏷️ ${clip(d.title, 240)}`).setURL(d.url).setDescription(desc);
+  if (d.category) e.addFields({ name: 'Catégorie', value: clip(d.category, 100), inline: true });
+  if (d.publishedAt) e.addFields({ name: 'Publié', value: `<t:${Math.floor(Date.parse(d.publishedAt) / 1000)}:R>`, inline: true });
+  if (d.excerpt) e.addFields({ name: 'Détails', value: clip(d.excerpt, 300) });
+  if (d.image) e.setThumbnail(d.image);
+  if (footer) e.setFooter({ text: footer });
+  return e;
+}
+
+function promoMessage(d, keyword) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setLabel('Voir le bon plan').setStyle(ButtonStyle.Link).setURL(d.url)
+  );
+  return { embeds: [promoEmbed(d, `Bon plan Dealabs · radar « ${keyword} »`).setTimestamp()], components: [row] };
+}
+
 function dealMessage(deal, keyword) {
+  if (deal.kind === 'promo') return promoMessage(deal, keyword);
   const p = get(deal.platform);
   const fire = deal.ratio >= 50 ? '🔥🔥' : deal.ratio >= 35 ? '🔥' : '💸';
   const embed = new EmbedBuilder()
@@ -42,9 +67,12 @@ const statLine = st => `médiane **${eur(st.median)}** · P25 ${eur(st.p25)} · 
 /** Réponse à « @bot rtx 3070ti » et /deals : synthèse du marché + 5 meilleures offres. */
 function marketMessage(r) {
   const hasData = r.overall.n >= 3;
+  const promos = r.promos || [];
   const summary = new EmbedBuilder().setColor(0x5865f2).setTitle(`📊 Marché : ${clip(r.query, 80)}`);
   if (!hasData) {
-    summary.setDescription('Pas assez d\'annonces comparables trouvées. Essaie un nom plus précis ou moins restrictif.');
+    summary.setDescription(promos.length
+      ? 'Pas assez d\'annonces d\'occasion pour calculer un prix médian. Voici les bons plans Dealabs correspondants.'
+      : 'Pas assez d\'annonces comparables trouvées. Essaie un nom plus précis ou moins restrictif.');
   } else {
     summary.setDescription(`Prix médian du marché : **${eur(r.overall.median)}**` +
       (r.maxPrice ? `\nBudget : ${eur(r.maxPrice)}` : '') +
@@ -69,10 +97,13 @@ function marketMessage(r) {
     if (d.image) e.setThumbnail(d.image);
     embeds.push(e);
   });
+  for (const p of promos.slice(0, 3)) embeds.push(promoEmbed(p, 'Bon plan Dealabs (prix promo, sans comparaison au marché)'));
   if (hasData && !r.best.length) {
     summary.addFields({ name: 'Offres', value: r.maxPrice ? 'Aucune offre dans ton budget.' : 'Aucune offre exploitable.' });
   }
-  const content = r.best.length ? '🔎 Meilleures offres du moment (verdict = estimation rapide ; envoie-moi le lien ou une capture pour une analyse complète) :' : undefined;
+  const content = r.best.length
+    ? `🔎 Meilleures offres du moment (verdict = estimation rapide ; envoie-moi le lien ou une capture pour une analyse complète)${promos.length ? ', puis 🏷️ bons plans Dealabs' : ''} :`
+    : promos.length ? '🏷️ Bons plans Dealabs correspondants :' : undefined;
   return { content, embeds };
 }
 
@@ -108,4 +139,4 @@ function analysisMessage(a) {
   return { embeds };
 }
 
-module.exports = { dealMessage, marketMessage, analysisMessage, eur };
+module.exports = { promoEmbed, promoMessage, dealMessage, marketMessage, analysisMessage, eur };

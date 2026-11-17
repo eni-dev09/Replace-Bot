@@ -5,6 +5,7 @@ const all = {
   leboncoin: require('./leboncoin'),
   vinted: require('./vinted'),
   ebay: require('./ebay'),
+  dealabs: require('./dealabs'),
 };
 
 const platforms = {};

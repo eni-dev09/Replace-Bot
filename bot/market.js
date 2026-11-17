@@ -1,6 +1,6 @@
 // Rapport de marché : interroge les plateformes, calcule la médiane et les meilleures offres.
 const platforms = require('./platforms');
-const { findDeals, stats } = require('./deals');
+const { findDeals, stats, filterPromos } = require('./deals');
 const { assess } = require('./trust');
 const { cached } = require('./cache');
 
@@ -11,12 +11,23 @@ const MARKET_LIMIT = 40;
  * Les stats sont calculées SANS plafond de prix (sinon la médiane est biaisée vers le bas) ;
  * maxPrice ne sert qu'à filtrer les offres affichées.
  */
-async function marketReport({ query, maxPrice = 0, platformIds = platforms.ids, minDiscount = 0.15, minMatch = 1, exclude = [], excludeId, limit = MARKET_LIMIT }) {
+async function marketReport({ query, maxPrice = 0, platformIds = platforms.ids, minDiscount = 0.15, minMatch = 1, exclude = [], excludeId, limit = MARKET_LIMIT, includePromos = true }) {
   const perPlatform = [];
+  const promos = []; // bons plans (Dealabs) : pas de médiane
   const errors = [];
   for (const pid of platformIds) {
     const p = platforms.get(pid);
     if (!p || p.available === false) continue;
+    if (p.kind === 'promo') {
+      if (!includePromos) continue;
+      try {
+        const ads = await cached(`${pid}|${query.toLowerCase()}|${limit}`, () => p.search({ query, limit }));
+        promos.push(...filterPromos(ads, { maxPrice, exclude }));
+      } catch (e) {
+        errors.push(`${p.label} : ${e.message}`);
+      }
+      continue;
+    }
     try {
       const ads = await cached(`${pid}|${query.toLowerCase()}|${limit}`, () => p.search({ query, limit }));
       const r = findDeals(ads, { maxPrice, minDiscount, query, minMatch, exclude, excludeId });
@@ -44,7 +55,7 @@ async function marketReport({ query, maxPrice = 0, platformIds = platforms.ids, 
   const rank = c => c.ratio - (c.suspicious ? 100 : 0) - (c.risk.risk >= 50 ? 40 : 0);
   cand.sort((a, b) => rank(b) - rank(a));
 
-  return { query, maxPrice, perPlatform, overall, best: cand.slice(0, 5), errors };
+  return { query, maxPrice, perPlatform, overall, best: cand.slice(0, 5), promos: promos.slice(0, 3), errors };
 }
 
 module.exports = { marketReport };

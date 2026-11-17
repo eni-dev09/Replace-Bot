@@ -58,6 +58,18 @@ sans ça il est désactivé automatiquement et le bot tourne avec Vinted seul (c
 - `/radar add` avec « toutes les plateformes » prend en compte les plateformes activées **au moment du scan** (donc eBay dès
   qu'il est activé). Les anciennes alertes créées avant la v2.1 gardent leur liste : recrée-les pour inclure eBay.
 
+## Bons plans Dealabs (flux RSS public, sans clé)
+Actif par défaut. Ce n'est **pas** une place de marché d'occasion : il n'y a pas de médiane de prix. Le bot lit le flux
+`https://www.dealabs.com/rss/tous` (30 derniers deals), filtre par **mot-clé** et **prix max**, puis affiche prix, marchand,
+catégorie et, quand le titre l'indique (« au lieu de X € »), la remise *annoncée* (déclarative, non vérifiée).
+- `@bot rtx 3070` et `/deals` ajoutent jusqu'à 3 bons plans Dealabs correspondants sous les offres d'occasion.
+- `/radar add` : une alerte « toutes plateformes » ou « Dealabs » poste les nouveaux deals correspondant au mot-clé et au budget
+  (la « remise min » ne s'applique pas aux bons plans).
+- ⚠️ Le flux ne couvre qu'environ **20 minutes** de deals : garde `DEAL_RADAR_INTERVAL_MIN` à **15 ou moins** (le bot avertit sinon).
+  Les mots-clés doivent apparaître dans le titre, la catégorie ou le début de la description.
+- Les deals gratuits sont reconnus (« gratuit » dans le titre) ; un prix absent s'affiche « prix non indiqué » et est écarté
+  quand un budget est fixé. Les montants en devise étrangère ne sont pas convertis.
+
 ## Ajouter une plateforme
 `bot/platforms/<nom>.js` : `{ id, label, emoji, color, available, unavailableReason, search(), parseUrl(), getAd() }`
 (voir `vinted.js`), puis la déclarer dans `bot/platforms/index.js`.
