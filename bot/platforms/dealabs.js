@@ -1,14 +1,14 @@
 // Source « bons plans » Dealabs — flux RSS public (https://www.dealabs.com/rss/tous : les 30 derniers deals).
 // Ce n'est PAS une place de marché d'occasion : pas de médiane de prix, on filtre les promos par mot-clé et prix max.
-// Le flux ne couvre qu'environ 20 minutes d'activité : garde un scan radar ≤ 15 min (DEAL_RADAR_INTERVAL_MIN).
+// Le flux ne couvre qu'environ 20 minutes d'activité : le radar scanne en continu (DEAL_RADAR_INTERVAL_S, défaut 60 s).
 //
-// Variables : DEALABS_FEED_URL (défaut https://www.dealabs.com/rss/tous), DEALABS_CACHE_S (défaut 120)
+// Variables : DEALABS_FEED_URL (défaut https://www.dealabs.com/rss/tous), DEALABS_CACHE_S (défaut 45)
 
 const { XMLParser } = require('fast-xml-parser');
 const { squash, tokens } = require('../deals');
 
 const env = (k, d = '') => (process.env[k] || d).trim();
-const cacheMs = () => { const n = Number.parseInt(process.env.DEALABS_CACHE_S ?? '', 10); return (Number.isFinite(n) && n >= 0 ? n : 120) * 1000; };
+const cacheMs = () => { const n = Number.parseInt(process.env.DEALABS_CACHE_S ?? '', 10); return (Number.isFinite(n) && n >= 0 ? n : 45) * 1000; };
 const DEALABS_HOST = /(^|\.)dealabs\.com$/i;
 const UA = 'Mozilla/5.0 (compatible; ReplaceBot/2.0; +https://github.com/eni-dev09/Replace-Bot)';
 

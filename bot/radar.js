@@ -12,13 +12,23 @@ const POST_DELAY_MS = 1200;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function intervalSeconds() {
+  const s = Number.parseInt(process.env.DEAL_RADAR_INTERVAL_S ?? '', 10);
+  const m = Number.parseInt(process.env.DEAL_RADAR_INTERVAL_MIN ?? '', 10);
+  const v = Number.isFinite(s) && s > 0 ? s : Number.isFinite(m) && m > 0 ? m * 60 : 60;
+  return Math.max(20, v);
+}
+const fmtInterval = s => (s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+
 const radar = {
   client: null,
   scanning: false,
   lastScan: null,
   nextScanAt: null,
   lastErrors: [],
-  intervalMin: parseInt(process.env.DEAL_RADAR_INTERVAL_MIN || '10', 10),
+  // Scan continu : une passe, puis la suivante démarre `intervalS` secondes après le DÉBUT de la précédente
+  // (jamais de chevauchement). DEAL_RADAR_INTERVAL_S (défaut 60, min 20) ; ancien DEAL_RADAR_INTERVAL_MIN toujours accepté.
+  intervalS: intervalSeconds(),
   timer: null,
 
   // Une plateforme -> deals (pas de post). Utilisé par /radar scan et /search.
@@ -96,6 +106,8 @@ const radar = {
     return out;
   },
 
+  fmtInterval() { return fmtInterval(this.intervalS); },
+
   async scanAll() {
     if (this.scanning) return { skipped: true };
     this.scanning = true;
@@ -110,7 +122,6 @@ const radar = {
     } finally {
       this.scanning = false;
       this.lastScan = new Date().toISOString();
-      this.nextScanAt = new Date(Date.now() + this.intervalMin * 60000).toISOString();
     }
     return { skipped: false, posted, errors: this.lastErrors.length };
   },
@@ -121,17 +132,28 @@ const radar = {
       console.log('[radar] scan auto désactivé');
       return;
     }
-    const run = () => this.scanAll()
-      .then(r => !r.skipped && console.log(`[radar] scan: ${r.posted} deal(s) postés, ${r.errors} erreur(s)`))
-      .catch(e => console.error('[radar] erreur scan:', e));
-    this.nextScanAt = new Date(Date.now() + 15000).toISOString();
-    setTimeout(run, 15000); // 1er scan peu après le démarrage
-    this.timer = setInterval(run, this.intervalMin * 60000);
-    console.log(`[radar] actif — scan toutes les ${this.intervalMin} min`);
-    if (platforms.ids.includes('dealabs') && this.intervalMin > 15) {
-      console.warn('[radar] Dealabs : le flux ne couvre que ~20 min de deals ; mets DEAL_RADAR_INTERVAL_MIN ≤ 15 pour n\'en rater aucun');
+    this.stopped = false;
+    const loop = async delayMs => {
+      this.nextScanAt = new Date(Date.now() + delayMs).toISOString();
+      this.timer = setTimeout(async () => {
+        if (this.stopped) return;
+        const t0 = Date.now();
+        try {
+          const r = await this.scanAll();
+          if (!r.skipped && r.posted) console.log(`[radar] ${r.posted} deal(s) postés, ${r.errors} erreur(s)`);
+        } catch (e) { console.error('[radar] erreur scan:', e); }
+        if (!this.stopped) loop(Math.max(1000, this.intervalS * 1000 - (Date.now() - t0)));
+      }, delayMs);
+    };
+    loop(15000); // 1er scan peu après le démarrage
+    console.log(`[radar] actif — scan en continu, une passe toutes les ${fmtInterval(this.intervalS)}`);
+    if (this.intervalS < 45) console.warn('[radar] intervalle très court : risque de blocage par Leboncoin/Vinted (conseillé ≥ 60 s)');
+    if (platforms.ids.includes('dealabs') && this.intervalS > 900) {
+      console.warn('[radar] Dealabs : le flux ne couvre que ~20 min de deals ; mets DEAL_RADAR_INTERVAL_S ≤ 900 pour n\'en rater aucun');
     }
   },
+
+  stop() { this.stopped = true; clearTimeout(this.timer); },
 };
 
 module.exports = radar;

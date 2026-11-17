@@ -106,7 +106,7 @@ async function handleRadar(i) {
     const mine = store.forGuild(i.guildId).length;
     const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📡 Statut du radar').addFields(
       { name: 'Alertes (ce serveur)', value: String(mine), inline: true },
-      { name: 'Intervalle', value: `${radar.intervalMin} min`, inline: true },
+      { name: 'Intervalle', value: radar.fmtInterval(), inline: true },
       { name: 'Scan en cours', value: radar.scanning ? 'oui' : 'non', inline: true },
       { name: 'Dernier scan', value: radar.lastScan ? `<t:${Math.floor(Date.parse(radar.lastScan) / 1000)}:R>` : 'jamais', inline: true },
       { name: 'Prochain scan', value: radar.nextScanAt ? `<t:${Math.floor(Date.parse(radar.nextScanAt) / 1000)}:R>` : 'n/c', inline: true },

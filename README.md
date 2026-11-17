@@ -65,7 +65,7 @@ catégorie et, quand le titre l'indique (« au lieu de X € »), la remise *ann
 - `@bot rtx 3070` et `/deals` ajoutent jusqu'à 3 bons plans Dealabs correspondants sous les offres d'occasion.
 - `/radar add` : une alerte « toutes plateformes » ou « Dealabs » poste les nouveaux deals correspondant au mot-clé et au budget
   (la « remise min » ne s'applique pas aux bons plans).
-- ⚠️ Le flux ne couvre qu'environ **20 minutes** de deals : garde `DEAL_RADAR_INTERVAL_MIN` à **15 ou moins** (le bot avertit sinon).
+- ⚠️ Le flux ne couvre qu'environ **20 minutes** de deals : le radar scanne en continu (`DEAL_RADAR_INTERVAL_S`, défaut 60 s).
   Les mots-clés doivent apparaître dans le titre, la catégorie ou le début de la description.
 - Les deals gratuits sont reconnus (« gratuit » dans le titre) ; un prix absent s'affiche « prix non indiqué » et est écarté
   quand un budget est fixé. Les montants en devise étrangère ne sont pas convertis.

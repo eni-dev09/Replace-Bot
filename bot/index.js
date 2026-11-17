@@ -44,7 +44,7 @@ client.on(Events.Error, e => console.error('[bot] client error:', e));
 process.on('unhandledRejection', e => console.error('[bot] unhandledRejection:', e));
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => { console.log(`[bot] ${sig} : arrêt`); client.destroy(); process.exit(0); });
+  process.on(sig, () => { console.log(`[bot] ${sig} : arrêt`); radar.stop(); client.destroy(); process.exit(0); });
 }
 
 client.login(DISCORD_TOKEN);
