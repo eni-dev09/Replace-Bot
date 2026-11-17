@@ -342,6 +342,30 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   delete platforms.platforms.prio;
   console.log('ok priorité livraison/France');
 
+  // 7. scan en continu : intervalle, pas de chevauchement, arrêt propre
+  const freshRadar = env => { const old = { ...process.env }; Object.assign(process.env, env); for (const k of ['DEAL_RADAR_INTERVAL_S', 'DEAL_RADAR_INTERVAL_MIN']) if (!(k in env)) delete process.env[k];
+    delete require.cache[require.resolve('./radar')]; const r = require('./radar'); Object.assign(process.env, old); return r; };
+  assert.strictEqual(freshRadar({}).intervalS, 60);
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_S: '30' }).intervalS, 30);
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_S: '5' }).intervalS, 20);          // minimum 20 s
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_MIN: '10' }).intervalS, 600);      // ancienne variable
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_S: 'abc' }).intervalS, 60);
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_S: '90' }).fmtInterval(), '90 s');
+  assert.strictEqual(freshRadar({ DEAL_RADAR_INTERVAL_S: '120' }).fmtInterval(), '2 min');
+  const realST = global.setTimeout;
+  const cr = freshRadar({ DEAL_RADAR_INTERVAL_S: '20' });
+  let running = 0, maxRunning = 0, passes = 0;
+  cr.scanAll = async () => { passes++; running++; maxRunning = Math.max(maxRunning, running); await new Promise(r => realST(r, 30)); running--; return { skipped: false, posted: 0, errors: 0 }; };
+  const delays = [];
+  global.setTimeout = (fn, ms, ...a) => { delays.push(ms); return realST(fn, Math.min(ms, 5), ...a); }; // accélère le temps
+  cr.start({});
+  await new Promise(r => realST(r, 400));
+  cr.stop(); const after = passes; await new Promise(r => realST(r, 100));
+  global.setTimeout = realST;
+  assert(after >= 3, 'plusieurs passes enchaînées : ' + after); assert.strictEqual(maxRunning, 1); assert.strictEqual(passes, after, 'arrêt effectif');
+  assert.strictEqual(delays[0], 15000); assert(delays.slice(1).every(d => d >= 1000 && d <= 20000));
+  console.log('ok scan en continu');
+
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);
   console.log('ok commandes:', cmds.definitions.map(c => c.name).join(', '));
