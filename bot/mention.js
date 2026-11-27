@@ -42,6 +42,7 @@ async function onMessage(msg, client, dependencies = {}) {
     return msg.reply({ content: '⏳ Doucement, une recherche à la fois (10 s entre deux demandes).', allowedMentions: { parse: [], repliedUser: false } }).catch(() => {});
   }
   last.set(msg.author.id, now);
+  if (last.size > 500) for (const [id, t] of last) if (now - t > COOLDOWN_MS) last.delete(id);
 
   const text = msg.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
   const urls = (text.match(/https?:\/\/[^\s<>]+/g) || []).map(u => u.replace(/[)\]}>.,;!?'"]+$/, ''));

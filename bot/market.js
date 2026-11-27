@@ -15,26 +15,20 @@ async function marketReport({ query, maxPrice = 0, platformIds = platforms.ids, 
   const perPlatform = [];
   const promos = []; // bons plans (Dealabs) : pas de médiane
   const errors = [];
-  for (const pid of platformIds) {
+  const ids = platformIds.filter(pid => { const p = platforms.get(pid); return p && p.available !== false && (p.kind !== 'promo' || includePromos); });
+  // chaque plateforme a sa propre file/limite de débit : on les interroge en parallèle (ordre du résultat conservé)
+  const results = await Promise.all(ids.map(async pid => {
     const p = platforms.get(pid);
-    if (!p || p.available === false) continue;
-    if (p.kind === 'promo') {
-      if (!includePromos) continue;
-      try {
-        const ads = await cached(`${pid}|${query.toLowerCase()}|${limit}`, () => p.search({ query, limit }));
-        promos.push(...filterPromos(ads, { maxPrice, exclude }));
-      } catch (e) {
-        errors.push(`${p.label} : ${e.message}`);
-      }
-      continue;
-    }
     try {
       const ads = await cached(`${pid}|${query.toLowerCase()}|${limit}`, () => p.search({ query, limit }));
-      const r = findDeals(ads, { maxPrice, minDiscount, query, minMatch, exclude, excludeId });
-      perPlatform.push({ pid, label: p.label, emoji: p.emoji, color: p.color, stats: r.stats, deals: r.deals, sample: r.sample });
-    } catch (e) {
-      errors.push(`${p.label} : ${e.message}`);
-    }
+      return { pid, p, ads };
+    } catch (e) { return { pid, p, error: e }; }
+  }));
+  for (const { pid, p, ads, error } of results) {
+    if (error) { errors.push(`${p.label} : ${error.message}`); continue; }
+    if (p.kind === 'promo') { promos.push(...filterPromos(ads, { maxPrice, exclude })); continue; }
+    const r = findDeals(ads, { maxPrice, minDiscount, query, minMatch, exclude, excludeId });
+    perPlatform.push({ pid, label: p.label, emoji: p.emoji, color: p.color, stats: r.stats, deals: r.deals, sample: r.sample });
   }
 
   const overall = stats(perPlatform.flatMap(p => p.sample.map(a => a.price)));

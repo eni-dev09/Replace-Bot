@@ -366,6 +366,49 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
   assert.strictEqual(delays[0], 15000); assert(delays.slice(1).every(d => d >= 1000 && d <= 20000));
   console.log('ok scan en continu');
 
+  // 8. régressions : envoi échoué, mémo de passe, parallélisme, store
+  {
+    const saved = store.targets; const sentOk = [];
+    let calls = 0;
+    platforms.platforms.optp = { id: 'optp', label: 'Opt', emoji: '🧪', color: 1, search: async () => { calls++; return [1, 2, 3, 4].map(i => pm(i, 100)).concat([pm(5, 60), pm(6, 65)]).map(a => ({ ...a, id: 'optp-' + a.id.split('-')[1], platform: 'optp', title: 'opt prod ' + a.id })); } };
+    const mkT = (id, ch) => ({ id, guildId: 'gO', channelId: ch, keyword: 'opt prod', maxPrice: 500, platforms: ['optp'], minDiscount: 0.2, exclude: [], scannedAt: 'x' });
+    // a) deux alertes identiques dans une passe = une seule recherche
+    store.targets = [mkT('o1', 'c1'), mkT('o2', 'c2')];
+    radar.client = { channels: { fetch: async () => ({ isTextBased: () => true, send: async m => { sentOk.push(m); } }) } };
+    await radar.scanAll(); assert.strictEqual(calls, 1, 'mémo de passe'); assert.strictEqual(sentOk.length, 4);
+    // b) envoi refusé : les deals ne sont PAS marqués vus, ils partent au scan suivant
+    store.targets = [mkT('o3', 'c3')]; store.seen.clear(); sentOk.length = 0;
+    let fail = true;
+    radar.client = { channels: { fetch: async () => ({ isTextBased: () => true, send: async m => { if (fail) throw new Error('Missing Permissions'); sentOk.push(m); } }) } };
+    const f1 = await radar.scanTarget(store.targets[0]); assert.strictEqual(f1.posted, 0); assert(f1.errors[0].includes('envoi'));
+    fail = false; const f2 = await radar.scanTarget(store.targets[0]); assert.strictEqual(f2.posted, 2, 'réessayé après échec');
+    // salon introuvable : idem
+    store.seen.clear(); radar.client = { channels: { fetch: async () => null } };
+    await radar.scanTarget(store.targets[0]);
+    radar.client = { channels: { fetch: async () => ({ isTextBased: () => true, send: async () => {} }) } };
+    assert.strictEqual((await radar.scanTarget(store.targets[0])).posted, 2, 'salon revenu');
+    // c) supprimer une alerte purge ses annonces vues
+    store.targets = [mkT('o4', 'c4')]; store.seen.add('o4:optp-1'); store.seen.add('autre:optp-1');
+    store.targets[0].guildId = 'gO'; assert(store.removeTarget('o4', 'gO')); assert(!store.seen.has('o4:optp-1') && store.seen.has('autre:optp-1'));
+    store.targets = saved; delete platforms.platforms.optp;
+    // d) plateformes interrogées en parallèle dans un rapport
+    let active = 0, peak = 0;
+    for (const id of ['pa', 'pb', 'pc']) platforms.platforms[id] = { id, label: id, emoji: '🧪', color: 1, search: async () => { active++; peak = Math.max(peak, active); await new Promise(r => setTimeout(r, 20)); active--; return []; } };
+    const prep = await marketReport({ query: 'parallele test', platformIds: ['pa', 'pb', 'pc'] });
+    assert.strictEqual(peak, 3, 'parallèle'); assert.deepStrictEqual(prep.perPlatform.map(x => x.pid), ['pa', 'pb', 'pc']);
+    for (const id of ['pa', 'pb', 'pc']) delete platforms.platforms[id];
+    // e) fichier d'alertes corrompu : conservé de côté, pas écrasé
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bot-corrupt-'));
+    fs.writeFileSync(path.join(dir, 'bot-targets.json'), '{pas du json');
+    const { execFileSync } = require('child_process');
+    const outp = execFileSync(process.execPath, ['-e', "const s=require('./bot/store');s.addTarget({guildId:'g',channelId:'c',keyword:'x',maxPrice:1,platforms:['vinted']});console.log(s.targets.length)"], { env: { ...process.env, BOT_DATA_DIR: dir }, cwd: path.join(__dirname, '..') }).toString().trim();
+    assert.strictEqual(outp, '1'); assert(fs.readdirSync(dir).some(f => f.startsWith('bot-targets.json.corrupt-')));
+    // f) ids d'alertes uniques même créés dans la même milliseconde
+    const ids = new Set(Array.from({ length: 20 }, (_, i) => store.addTarget({ guildId: 'gU', channelId: 'c', keyword: 'k' + i, maxPrice: 5, platforms: ['x'] }).target.id)); assert.strictEqual(ids.size, 20);
+    store.targets = store.targets.filter(t => t.guildId !== 'gU');
+    console.log('ok régressions optimisation');
+  }
+
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);
   console.log('ok commandes:', cmds.definitions.map(c => c.name).join(', '));
