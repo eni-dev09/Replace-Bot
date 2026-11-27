@@ -31,19 +31,32 @@ const radar = {
   intervalS: intervalSeconds(),
   timer: null,
 
+  // Mémo d'une passe : plusieurs alertes sur le même produit = une seule requête par plateforme.
+  passMemo: null,
+  fetchAds(p, keyword) {
+    if (!this.passMemo) return p.search({ query: keyword, limit: SCAN_LIMIT });
+    const key = `${p.id}|${String(keyword).toLowerCase().trim()}`;
+    if (!this.passMemo.has(key)) {
+      const pr = p.search({ query: keyword, limit: SCAN_LIMIT });
+      this.passMemo.set(key, pr);
+      pr.catch(() => this.passMemo?.delete(key)); // un échec n'est pas mémorisé
+    }
+    return this.passMemo.get(key);
+  },
+
   // Une plateforme -> deals (pas de post). Utilisé par /radar scan et /search.
   async searchPlatform(platformId, { keyword, maxPrice, minDiscount, exclude = [] }) {
     const p = platforms.get(platformId);
     if (p.kind === 'promo') {
       // Bons plans : pas de médiane ; filtrés par mot-clé (côté source), budget et mots exclus
-      const ads = await p.search({ query: keyword, limit: SCAN_LIMIT });
+      const ads = await this.fetchAds(p, keyword);
       const deals = filterPromos(ads, { maxPrice, exclude }).map(a => ({
         ...a, promo: true, ratio: a.originalPrice ? Math.round(((a.originalPrice - a.price) / a.originalPrice) * 100) : 0,
       }));
       return { ads, median: 0, stats: { n: 0 }, sample: [], deals };
     }
     // Pas de plafond de prix côté plateforme : il fausserait la médiane (appliqué ensuite sur les deals)
-    const ads = await p.search({ query: keyword, limit: SCAN_LIMIT });
+    const ads = await this.fetchAds(p, keyword);
     return { ads, ...findDeals(ads, { maxPrice, minDiscount, query: keyword, exclude }) };
   },
 
@@ -53,18 +66,18 @@ const radar = {
     let fresh = [];
 
     const list = t.platforms.includes('*') ? platforms.ids : t.platforms;
-    for (const pid of list) {
-      if (!platforms.platforms[pid]) { out.errors.push(`${pid}: plateforme indisponible`); continue; }
-      try {
-        const { deals } = await this.searchPlatform(pid, t);
-        out.found += deals.length;
-        for (const d of deals) {
-          const key = `${t.id}:${d.id}`;
-          if (store.seen.has(key)) continue;
-          fresh.push({ d, key });
-        }
-      } catch (e) {
-        out.errors.push(`${pid}: ${e.message}`);
+    // plateformes en parallèle (chacune a sa file de débit) ; résultats traités dans l'ordre de la liste
+    const results = await Promise.all(list.map(async pid => {
+      if (!platforms.platforms[pid]) return { pid, error: new Error('plateforme indisponible') };
+      try { return { pid, res: await this.searchPlatform(pid, t) }; } catch (error) { return { pid, error }; }
+    }));
+    for (const { pid, res, error } of results) {
+      if (error) { out.errors.push(`${pid}: ${error.message}`); continue; }
+      out.found += res.deals.length;
+      for (const d of res.deals) {
+        const key = `${t.id}:${d.id}`;
+        if (store.seen.has(key)) continue;
+        fresh.push({ d, key });
       }
     }
 
@@ -80,11 +93,12 @@ const radar = {
     if (post && toPost.length && this.client) {
       const channel = await this.client.channels.fetch(t.channelId).catch(() => null);
       if (!channel?.isTextBased()) {
+        for (const { key } of toPost) store.seen.delete(key); // on réessaiera au prochain scan
         out.errors.push(`salon ${t.channelId} introuvable ou inaccessible`);
       } else {
         const ping = t.roleId ? `<@&${t.roleId}>` : undefined;
         let first = true;
-        for (const { d } of toPost) {
+        for (const [idx, { d }] of toPost.entries()) {
           try {
             const payload = dealMessage(d, t.keyword);
             // le ping de rôle n'est envoyé qu'une fois par scan (pas de spam)
@@ -93,6 +107,7 @@ const radar = {
             out.posted++;
           } catch (e) {
             out.errors.push(`envoi: ${e.message}`);
+            for (const { key } of toPost.slice(idx)) store.seen.delete(key); // non postées : réessayées au prochain scan
             break;
           }
           await sleep(POST_DELAY_MS);
@@ -112,6 +127,7 @@ const radar = {
     if (this.scanning) return { skipped: true };
     this.scanning = true;
     this.lastErrors = [];
+    this.passMemo = new Map();
     let posted = 0;
     try {
       for (const t of [...store.targets]) {
@@ -120,6 +136,7 @@ const radar = {
         r.errors.forEach(e => this.lastErrors.push(`${t.keyword} → ${e}`));
       }
     } finally {
+      this.passMemo = null;
       this.scanning = false;
       this.lastScan = new Date().toISOString();
     }
