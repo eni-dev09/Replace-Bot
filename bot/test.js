@@ -409,6 +409,14 @@ const gpu = (id, price, title, extra = {}) => ({ id: 'fake-' + id, platform: 'fa
     console.log('ok régressions optimisation');
   }
 
+  // 9. scanAll expose alertes/deals trouvés pour les logs
+  {
+    const saved = store.targets; store.targets = [];
+    const r0 = await radar.scanAll(); assert.strictEqual(r0.targets, 0); assert.strictEqual(r0.found, 0);
+    store.targets = saved;
+    console.log('ok radar logs');
+  }
+
   const cmds = require('./commands');
   assert.strictEqual(cmds.definitions.length, 3);
   console.log('ok commandes:', cmds.definitions.map(c => c.name).join(', '));

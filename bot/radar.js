@@ -128,11 +128,12 @@ const radar = {
     this.scanning = true;
     this.lastErrors = [];
     this.passMemo = new Map();
-    let posted = 0;
+    let posted = 0, found = 0;
+    const list = [...store.targets];
     try {
-      for (const t of [...store.targets]) {
+      for (const t of list) {
         const r = await this.scanTarget(t);
-        posted += r.posted;
+        posted += r.posted; found += r.found;
         r.errors.forEach(e => this.lastErrors.push(`${t.keyword} → ${e}`));
       }
     } finally {
@@ -140,7 +141,7 @@ const radar = {
       this.scanning = false;
       this.lastScan = new Date().toISOString();
     }
-    return { skipped: false, posted, errors: this.lastErrors.length };
+    return { skipped: false, posted, found, targets: list.length, errors: this.lastErrors.length };
   },
 
   start(client) {
@@ -157,7 +158,12 @@ const radar = {
         const t0 = Date.now();
         try {
           const r = await this.scanAll();
-          if (!r.skipped && r.posted) console.log(`[radar] ${r.posted} deal(s) postés, ${r.errors} erreur(s)`);
+          if (!r.skipped) {
+            this.passes = (this.passes || 0) + 1;
+            const loud = r.posted || r.errors || !r.targets || this.passes <= 3 || this.passes % 10 === 0; // pas de spam quand tout est calme
+            if (loud) console.log(`[radar] passe ${this.passes} : ${r.targets} alerte(s), ${r.found} deal(s) trouvé(s), ${r.posted} posté(s), ${r.errors} erreur(s)${r.targets ? '' : ' → aucune alerte : crée-en une avec /radar add'}`);
+            for (const e of this.lastErrors.slice(0, 5)) console.warn(`[radar]   ✗ ${e}`);
+          }
         } catch (e) { console.error('[radar] erreur scan:', e); }
         if (!this.stopped) loop(Math.max(1000, this.intervalS * 1000 - (Date.now() - t0)));
       }, delayMs);
